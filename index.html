@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Cassa</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header con saldi -->
+        <header class="app-header">
+            <h1 class="header-title">Gestione Cassa</h1>
+            <div class="saldi-container">
+                <div class="saldo-card">
+                    <div class="saldo-label">Saldo Contabile</div>
+                    <div class="saldo-value" id="saldo-contabile">€ 0,00</div>
+                </div>
+                <div class="saldo-card">
+                    <div class="saldo-label">Saldo Disponibile</div>
+                    <div class="saldo-value" id="saldo-disponibile">€ 0,00</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Sidebar con form -->
+        <aside class="app-sidebar">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Nuovo Movimento</h2>
+                </div>
+                <div class="card-content">
+                    <form id="movimento-form">
+                        <div class="form-group">
+                            <label class="form-label" for="data">Data</label>
+                            <input type="date" id="data" class="form-input" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="descrizione">Descrizione</label>
+                            <input type="text" id="descrizione" class="form-input" required 
+                                   placeholder="Es: Pagamento fornitore">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="importo">Importo (€)</label>
+                            <input type="number" id="importo" class="form-input" 
+                                   step="0.01" min="0.01" required placeholder="0,00">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="tipo">Tipo</label>
+                            <select id="tipo" class="form-select" required>
+                                <option value="">Seleziona tipo</option>
+                                <option value="entrata">Entrata</option>
+                                <option value="uscita">Uscita</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="categoria">Categoria</label>
+                            <select id="categoria" class="form-select" required>
+                                <option value="">Seleziona categoria</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="stato">Stato</label>
+                            <select id="stato" class="form-select" required>
+                                <option value="previsto">Previsto</option>
+                                <option value="eseguito">Eseguito</option>
+                                <option value="annullato">Annullato</option>
+                            </select>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+                            <span id="form-submit-text">Aggiungi Movimento</span>
+                        </button>
+                        
+                        <button type="button" id="cancel-edit" class="btn btn-secondary" 
+                                style="width: 100%; margin-top: 0.5rem; display: none;">
+                            Annulla Modifica
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Impostazioni saldi -->
+            <div class="card" style="margin-top: 2rem;">
+                <div class="card-header">
+                    <h2 class="card-title">Impostazioni</h2>
+                </div>
+                <div class="card-content">
+                    <div class="form-group">
+                        <label class="form-label" for="saldo-iniziale">Saldo Iniziale (€)</label>
+                        <input type="number" id="saldo-iniziale" class="form-input" 
+                               step="0.01" placeholder="0,00">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="limite-scoperto">Limite Scoperto (€)</label>
+                        <input type="number" id="limite-scoperto" class="form-input" 
+                               step="0.01" min="0" placeholder="0,00">
+                    </div>
+                    
+                    <button type="button" id="salva-impostazioni" class="btn btn-secondary" 
+                            style="width: 100%;">
+                        Salva Impostazioni
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="app-main">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Movimenti</h2>
+                </div>
+                <div class="card-content" style="padding: 0;">
+                    <div class="table-container">
+                        <table class="movimenti-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Descrizione</th>
+                                    <th>Categoria</th>
+                                    <th>Importo</th>
+                                    <th>Tipo</th>
+                                    <th>Stato</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody id="movimenti-tbody">
+                                <!-- Movimenti generati dinamicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal per conferme -->
+    <div id="modal-overlay" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modal-title">Conferma</h3>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="modal-message">Sei sicuro?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modal-cancel">Annulla</button>
+                <button class="btn btn-danger" id="modal-confirm">Conferma</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="config.js"></script>
+    <script>
+        // === STATO GLOBALE ===
+        let supabase;
+        let app = {
+            movimenti: [],
+            categorie: [],
+            settings: {
+                saldoIniziale: 0,
+                limiteScoperto: 0
+            },
+            saldoContabile: 0,
+            saldoDisponibile: 0,
+            editingId: null
+        };
+
+        // === INIZIALIZZAZIONE ===
+        document.addEventListener('DOMContentLoaded', init);
+
+        async function init() {
+            try {
+                // Inizializza Supabase
+                supabase = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
+                
+                // Carica dati iniziali
+                await loadCategorie();
+                await loadSettings();
+                await loadMovimenti();
+                
+                // Setup event listeners
+                setupEventListeners();
+                
+                // Imposta data odierna come default
+                document.getElementById('data').valueAsDate = new Date();
+                
+                console.log('App inizializzata correttamente');
+            } catch (error) {
+                console.error('Errore inizializzazione:', error);
+                alert('Errore di connessione al database. Controlla le configurazioni.');
+            }
+        }
+
+        // === DATABASE FUNCTIONS ===
+        async function loadCategorie() {
+            const { data, error } = await supabase
+                .from('categorie')
+                .select('*')
+                .eq('attiva', true)
+                .order('tipo', { ascending: true })
+                .order('nome', { ascending: true });
+            
+            if (error) throw error;
+            
+            app.categorie = data || [];
+            updateCategorieSelect();
+        }
+
+        async function loadSettings() {
+            const { data, error } = await supabase
+                .from('settings')
+                .select('*')
+                .limit(1);
+            
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                app.settings = {
+                    saldoIniziale: parseFloat(data[0].saldo_iniziale) || 0,
+                    limiteScoperto: parseFloat(data[0].limite_scoperto) || 0
+                };
+            }
+            
+            updateSettingsForm();
+        }
+
+        async function loadMovimenti() {
+            const { data, error } = await supabase
+                .from('movimenti')
+                .select(`
+                    *,
+                    categoria:categorie(nome, colore)
+                `)
+                .order('data', { ascending: true })
+                .order('posizione_ordinamento', { ascending: true });
+            
+            if (error) throw error;
+            
+            app.movimenti = data || [];
+            renderTabella();
+            updateSaldi();
+        }
+
+        async function saveMovimento(movimento) {
+            const { data, error } = await supabase
+                .from('movimenti')
+                .insert([movimento])
+                .select();
+            
+            if (error) throw error;
+            
+            await loadMovimenti();
+            return data[0];
+        }
+
+        async function updateMovimento(id, updates) {
+            const { data, error } = await supabase
+                .from('movimenti')
+                .update(updates)
+                .eq('id', id)
+                .select();
+            
+            if (error) throw error;
+            
+            await loadMovimenti();
+            return data[0];
+        }
+
+        async function deleteMovimento(id) {
+            const { error } = await supabase
+                .from('movimenti')
+                .delete()
+                .eq('id', id);
+            
+            if (error) throw error;
+            
+            await loadMovimenti();
+        }
+
+        async function duplicateMovimento(movimento) {
+            const duplicato = {
+                data: movimento.data,
+                descrizione: `${movimento.descrizione} (copia)`,
+                importo: movimento.importo,
+                categoria_id: movimento.categoria_id,
+                tipo: movimento.tipo,
+                stato: 'previsto', // Sempre previsto per i duplicati
+                posizione_ordinamento: movimento.posizione_ordinamento
+            };
+            
+            return await saveMovimento(duplicato);
+        }
+
+        async function saveSettings() {
+            const settings = {
+                saldo_iniziale: parseFloat(document.getElementById('saldo-iniziale').value) || 0,
+                limite_scoperto: parseFloat(document.getElementById('limite-scoperto').value) || 0,
+                updated_at: new Date().toISOString()
+            };
+
+            const { error } = await supabase
+                .from('settings')
+                .upsert(settings);
+            
+            if (error) throw error;
+            
+            app.settings.saldoIniziale = settings.saldo_iniziale;
+            app.settings.limiteScoperto = settings.limite_scoperto;
+            
+            updateSaldi();
+        }
+
+        // === UI FUNCTIONS ===
+        function updateCategorieSelect() {
+            const select = document.getElementById('categoria');
+            const currentValue = select.value;
+            
+            // Mantieni prima opzione
+            const firstOption = select.children[0];
+            select.innerHTML = '';
+            select.appendChild(firstOption);
+            
+            // Aggiungi categorie per tipo
+            ['entrata', 'uscita'].forEach(tipo => {
+                const categorieTipo = app.categorie.filter(c => c.tipo === tipo);
+                if (categorieTipo.length > 0) {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = tipo.charAt(0).toUpperCase() + tipo.slice(1) + 'e';
+                    
+                    categorieTipo.forEach(categoria => {
+                        const option = document.createElement('option');
+                        option.value = categoria.id;
+                        option.textContent = categoria.nome;
+                        optgroup.appendChild(option);
+                    });
+                    
+                    select.appendChild(optgroup);
+                }
+            });
+            
+            // Ripristina valore se possibile
+            if (currentValue) select.value = currentValue;
+        }
+
+        function updateSettingsForm() {
+            document.getElementById('saldo-iniziale').value = app.settings.saldoIniziale;
+            document.getElementById('limite-scoperto').value = app.settings.limiteScoperto;
+        }
+
+        function renderTabella() {
+            const tbody = document.getElementById('movimenti-tbody');
+            
+            if (app.movimenti.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 3rem; color: var(--gray-500);">
+                            Nessun movimento presente. Aggiungi il primo movimento dal form a sinistra.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = app.movimenti.map(movimento => `
+                <tr class="movimento-row" draggable="true" data-id="${movimento.id}">
+                    <td>${CONFIG_UTILS.formatDate(movimento.data)}</td>
+                    <td>${movimento.descrizione}</td>
+                    <td>
+                        <span class="categoria-badge" style="background-color: ${movimento.categoria?.colore || '#e5e7eb'}20; border-color: ${movimento.categoria?.colore || '#d1d5db'};">
+                            ${movimento.categoria?.nome || 'N/A'}
+                        </span>
+                    </td>
+                    <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
+                        ${movimento.tipo === 'entrata' ? '+' : '-'}${CONFIG_UTILS.formatCurrency(Math.abs(movimento.importo))}
+                    </td>
+                    <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
+                        ${movimento.tipo.charAt(0).toUpperCase() + movimento.tipo.slice(1)}
+                    </td>
+                    <td>
+                        <span class="status-badge status-${movimento.stato}">
+                            ${movimento.stato}
+                        </span>
+                    </td>
+                    <td class="actions-cell">
+                        <div class="action-buttons">
+                            <button class="btn-icon edit" onclick="editMovimento('${movimento.id}')" title="Modifica">
+                                ✏️
+                            </button>
+                            <button class="btn-icon duplicate" onclick="duplicateMovimentoAction('${movimento.id}')" title="Duplica">
+                                📋
+                            </button>
+                            <button class="btn-icon delete" onclick="confirmDelete('${movimento.id}')" title="Elimina">
+                                🗑️
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+            
+            // Riabilita drag & drop
+            initDragDrop();
+        }
+
+        function updateSaldi() {
+            const entrate = app.movimenti
+                .filter(m => m.tipo === 'entrata' && m.stato !== 'annullato')
+                .reduce((sum, m) => sum + parseFloat(m.importo), 0);
+            
+            const uscite = app.movimenti
+                .filter(m => m.tipo === 'uscita' && m.stato !== 'annullato')
+                .reduce((sum, m) => sum + parseFloat(m.importo), 0);
+            
+            app.saldoContabile = app.settings.saldoIniziale + entrate - uscite;
+            app.saldoDisponibile = app.saldoContabile - app.settings.limiteScoperto;
+            
+            // Aggiorna UI
+            const saldoContabileEl = document.getElementById('saldo-contabile');
+            const saldoDisponibileEl = document.getElementById('saldo-disponibile');
+            
+            saldoContabileEl.textContent = CONFIG_UTILS.formatCurrency(app.saldoContabile);
+            saldoDisponibileEl.textContent = CONFIG_UTILS.formatCurrency(app.saldoDisponibile);
+            
+            // Applica classi colore
+            saldoContabileEl.className = 'saldo-value ' + (app.saldoContabile >= 0 ? 'positive' : 'negative');
+            saldoDisponibileEl.className = 'saldo-value ' + 
+                (app.saldoDisponibile >= 0 ? 'positive' : app.saldoDisponibile < -app.settings.limiteScoperto ? 'negative' : 'warning');
+        }
+
+        // === FORM HANDLERS ===
+        function resetForm() {
+            document.getElementById('movimento-form').reset();
+            document.getElementById('data').valueAsDate = new Date();
+            document.getElementById('form-submit-text').textContent = 'Aggiungi Movimento';
+            document.getElementById('cancel-edit').style.display = 'none';
+            app.editingId = null;
+        }
+
+        function editMovimento(id) {
+            const movimento = app.movimenti.find(m => m.id === id);
+            if (!movimento) return;
+            
+            // Popola form
+            document.getElementById('data').value = movimento.data;
+            document.getElementById('descrizione').value = movimento.descrizione;
+            document.getElementById('importo').value = Math.abs(movimento.importo);
+            document.getElementById('tipo').value = movimento.tipo;
+            document.getElementById('categoria').value = movimento.categoria_id;
+            document.getElementById('stato').value = movimento.stato;
+            
+            // Cambia stato form
+            document.getElementById('form-submit-text').textContent = 'Aggiorna Movimento';
+            document.getElementById('cancel-edit').style.display = 'block';
+            app.editingId = id;
+        }
+
+        async function duplicateMovimentoAction(id) {
+            const movimento = app.movimenti.find(m => m.id === id);
+            if (!movimento) return;
+            
+            try {
+                await duplicateMovimento(movimento);
+                console.log('Movimento duplicato con successo');
+            } catch (error) {
+                console.error('Errore duplicazione:', error);
+                alert('Errore durante la duplicazione del movimento');
+            }
+        }
+
+        function confirmDelete(id) {
+            showModal(
+                'Elimina Movimento',
+                'Sei sicuro di voler eliminare questo movimento? L\'operazione non può essere annullata.',
+                async () => {
+                    try {
+                        await deleteMovimento(id);
+                        console.log('Movimento eliminato con successo');
+                    } catch (error) {
+                        console.error('Errore eliminazione:', error);
+                        alert('Errore durante l\'eliminazione del movimento');
+                    }
+                }
+            );
+        }
+
+        // === MODAL FUNCTIONS ===
+        function showModal(title, message, onConfirm) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').textContent = message;
+            document.getElementById('modal-overlay').style.display = 'flex';
+            
+            document.getElementById('modal-confirm').onclick = () => {
+                hideModal();
+                onConfirm();
+            };
+        }
+
+        function hideModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+        }
+
+        // === DRAG & DROP ===
+        function initDragDrop() {
+            // Implementazione drag & drop sarà aggiunta nella prossima iterazione
+            console.log('Drag & Drop non ancora implementato');
+        }
+
+        // === EVENT LISTENERS ===
+        function setupEventListeners() {
+            // Form movimento
+            document.getElementById('movimento-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const formData = {
+                    data: document.getElementById('data').value,
+                    descrizione: document.getElementById('descrizione').value.trim(),
+                    importo: parseFloat(document.getElementById('importo').value),
+                    categoria_id: document.getElementById('categoria').value,
+                    tipo: document.getElementById('tipo').value,
+                    stato: document.getElementById('stato').value,
+                    posizione_ordinamento: 0
+                };
+                
+                try {
+                    if (app.editingId) {
+                        await updateMovimento(app.editingId, formData);
+                        console.log('Movimento aggiornato');
+                    } else {
+                        await saveMovimento(formData);
+                        console.log('Movimento aggiunto');
+                    }
+                    resetForm();
+                } catch (error) {
+                    console.error('Errore salvataggio movimento:', error);
+                    alert('Errore durante il salvataggio del movimento');
+                }
+            });
+            
+            // Annulla modifica
+            document.getElementById('cancel-edit').addEventListener('click', resetForm);
+            
+            // Salva impostazioni
+            document.getElementById('salva-impostazioni').addEventListener('click', async () => {
+                try {
+                    await saveSettings();
+                    alert('Impostazioni salvate con successo');
+                } catch (error) {
+                    console.error('Errore salvataggio impostazioni:', error);
+                    alert('Errore durante il salvataggio delle impostazioni');
+                }
+            });
+            
+            // Modal
+            document.getElementById('modal-close').addEventListener('click', hideModal);
+            document.getElementById('modal-cancel').addEventListener('click', hideModal);
+            document.getElementById('modal-overlay').addEventListener('click', (e) => {
+                if (e.target === e.currentTarget) hideModal();
+            });
+            
+            // Filtro categorie per tipo
+            document.getElementById('tipo').addEventListener('change', (e) => {
+                const categoriaSelect = document.getElementById('categoria');
+                categoriaSelect.value = ''; // Reset selezione categoria
+            });
+        }
+    </script>
+</body>
+</html>
