@@ -553,6 +553,25 @@ body {
     background: #dc2626;
 }
 
+/* Pulsante ripristina */
+.btn-icon.restore {
+    background: var(--info);
+    color: white;
+}
+
+.btn-icon.restore:hover {
+    background: #2563eb;
+}
+
+/* Stile per righe storico */
+.storico-row {
+    opacity: 0.8;
+}
+
+.storico-row:hover {
+    opacity: 1;
+}
+
 /* Categoria badge */
 .categoria-badge {
     display: inline-flex;
