@@ -140,11 +140,75 @@ body {
     overflow-y: auto;
 }
 
+/* Sidebar menu */
+.sidebar-menu {
+    margin-bottom: 2rem;
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    color: var(--gray-600);
+    font-weight: 500;
+}
+
+.menu-item:hover {
+    background: var(--gray-100);
+    color: var(--gray-800);
+}
+
+.menu-item.active {
+    background: var(--primary);
+    color: white;
+}
+
+.menu-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+/* Main header */
+.main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.main-header h2 {
+    font-size: var(--font-size-2xl);
+    font-weight: 600;
+    color: var(--gray-800);
+    margin: 0;
+}
+
 /* Main content */
 .app-main {
     grid-area: main;
     padding: 2rem;
     overflow-y: auto;
+}
+
+/* Form layouts */
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+/* Modal sizes */
+.modal.large {
+    width: 90%;
+    max-width: 600px;
 }
 
 /* === 3. COMPONENTI === */
