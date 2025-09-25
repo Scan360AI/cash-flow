@@ -6,6 +6,7 @@
     <title>Gestione Cassa</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -75,11 +76,13 @@
                         </div>
                         
                         <button type="submit" class="btn btn-primary btn-lg" style="width: 100%;">
+                            <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
                             <span id="form-submit-text">Aggiungi Movimento</span>
                         </button>
                         
                         <button type="button" id="cancel-edit" class="btn btn-secondary" 
                                 style="width: 100%; margin-top: 0.5rem; display: none;">
+                            <i data-lucide="x" style="width: 16px; height: 16px;"></i>
                             Annulla Modifica
                         </button>
                     </form>
@@ -106,6 +109,7 @@
                     
                     <button type="button" id="salva-impostazioni" class="btn btn-secondary" 
                             style="width: 100%;">
+                        <i data-lucide="save" style="width: 16px; height: 16px;"></i>
                         Salva Impostazioni
                     </button>
                 </div>
@@ -129,6 +133,7 @@
                                     <th>Importo</th>
                                     <th>Tipo</th>
                                     <th>Stato</th>
+                                    <th>Saldo Contabile</th>
                                     <th>Azioni</th>
                                 </tr>
                             </thead>
@@ -551,7 +556,7 @@
             if (app.movimenti.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="7" style="text-align: center; padding: 3rem; color: var(--gray-500);">
+                        <td colspan="8" style="text-align: center; padding: 3rem; color: var(--gray-500);">
                             Nessun movimento presente. Aggiungi il primo movimento dal form a sinistra.
                         </td>
                     </tr>
@@ -559,9 +564,55 @@
                 return;
             }
             
-            tbody.innerHTML = app.movimenti.map(movimento => `
+            // Ordina movimenti per data (cronologico per calcolo saldo progressivo)
+            const movimentiOrdinati = [...app.movimenti].sort((a, b) => {
+                const dateA = new Date(a.data);
+                const dateB = new Date(b.data);
+                if (dateA.getTime() === dateB.getTime()) {
+                    return (a.posizione_ordinamento || 0) - (b.posizione_ordinamento || 0);
+                }
+                return dateA - dateB;
+            });
+            
+            // Calcola saldi progressivi
+            let saldoProgressivo = app.settings.saldoIniziale;
+            
+            const movimentiConSaldo = movimentiOrdinati.map(movimento => {
+                // Calcola nuovo saldo solo per movimenti non annullati
+                if (movimento.stato !== 'annullato') {
+                    if (movimento.tipo === 'entrata') {
+                        saldoProgressivo += parseFloat(movimento.importo);
+                    } else if (movimento.tipo === 'uscita') {
+                        saldoProgressivo -= parseFloat(movimento.importo);
+                    }
+                }
+                
+                // Determina colore saldo
+                let saldoClass = '';
+                let saldoIcon = '';
+                
+                if (saldoProgressivo >= 0) {
+                    saldoClass = 'saldo-positivo';
+                    saldoIcon = 'check-circle';
+                } else if (saldoProgressivo > -app.settings.limiteScoperto) {
+                    saldoClass = 'saldo-allerta';
+                    saldoIcon = 'alert-triangle';
+                } else {
+                    saldoClass = 'saldo-critico';
+                    saldoIcon = 'x-circle';
+                }
+                
+                return {
+                    ...movimento,
+                    saldoProgressivo,
+                    saldoClass,
+                    saldoIcon
+                };
+            });
+            
+            tbody.innerHTML = movimentiConSaldo.map(movimento => `
                 <tr class="movimento-row" draggable="true" data-id="${movimento.id}">
-                    <td>${CONFIG_UTILS.formatDate(movimento.data)}</td>
+                    <td>${window.CONFIG_UTILS.formatDate(movimento.data)}</td>
                     <td>${movimento.descrizione}</td>
                     <td>
                         <span class="categoria-badge" style="background-color: ${movimento.categoria?.colore || '#e5e7eb'}20; border-color: ${movimento.categoria?.colore || '#d1d5db'};">
@@ -569,7 +620,7 @@
                         </span>
                     </td>
                     <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
-                        ${movimento.tipo === 'entrata' ? '+' : '-'}${CONFIG_UTILS.formatCurrency(Math.abs(movimento.importo))}
+                        ${movimento.tipo === 'entrata' ? '+' : '-'}${window.CONFIG_UTILS.formatCurrency(Math.abs(movimento.importo))}
                     </td>
                     <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
                         ${movimento.tipo.charAt(0).toUpperCase() + movimento.tipo.slice(1)}
@@ -579,21 +630,52 @@
                             ${movimento.stato}
                         </span>
                     </td>
+                    <td class="saldo-progressivo ${movimento.saldoClass}">
+                        <div class="saldo-container">
+                            <i data-lucide="${movimento.saldoIcon}" class="saldo-icon"></i>
+                            <span class="saldo-amount">${window.CONFIG_UTILS.formatCurrency(movimento.saldoProgressivo)}</span>
+                        </div>
+                    </td>
                     <td class="actions-cell">
                         <div class="action-buttons">
-                            <button class="btn-icon edit" onclick="editMovimento('${movimento.id}')" title="Modifica">
-                                ✏️
+                            <button class="btn-icon ${movimento.stato === 'eseguito' ? 'executed' : 'pending'}" 
+                                    onclick="toggleEseguito('${movimento.id}')" 
+                                    title="${movimento.stato === 'eseguito' ? 'Segna come previsto' : 'Segna come eseguito'}">
+                                <i data-lucide="${movimento.stato === 'eseguito' ? 'check-circle-2' : 'circle'}" 
+                                   style="width: 14px; height: 14px;"></i>
                             </button>
-                            <button class="btn-icon duplicate" onclick="duplicateMovimentoAction('${movimento.id}')" title="Duplica">
-                                📋
+                            <button class="btn-icon ${movimento.is_modificato ? 'locked' : 'unlocked'}" 
+                                    onclick="toggleBloccato('${movimento.id}')" 
+                                    title="${movimento.is_modificato ? 'Sblocca movimento' : 'Blocca movimento'}">
+                                <i data-lucide="${movimento.is_modificato ? 'lock' : 'unlock'}" 
+                                   style="width: 14px; height: 14px;"></i>
                             </button>
-                            <button class="btn-icon delete" onclick="confirmDelete('${movimento.id}')" title="Elimina">
-                                🗑️
+                            <button class="btn-icon edit" 
+                                    onclick="editMovimento('${movimento.id}')" 
+                                    title="Modifica" 
+                                    ${movimento.is_modificato ? 'disabled' : ''}>
+                                <i data-lucide="edit" style="width: 14px; height: 14px;"></i>
+                            </button>
+                            <button class="btn-icon duplicate" 
+                                    onclick="duplicateMovimentoAction('${movimento.id}')" 
+                                    title="Duplica">
+                                <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
+                            </button>
+                            <button class="btn-icon delete" 
+                                    onclick="confirmDelete('${movimento.id}')" 
+                                    title="Elimina"
+                                    ${movimento.is_modificato ? 'disabled' : ''}>
+                                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
                             </button>
                         </div>
                     </td>
                 </tr>
             `).join('');
+            
+            // Inizializza le icone Lucide
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
             
             // Riabilita drag & drop
             initDragDrop();
@@ -760,6 +842,18 @@
                 categoriaSelect.value = ''; // Reset selezione categoria
             });
         }
+        
+        // Inizializza icone Lucide quando la pagina è pronta
+        document.addEventListener('DOMContentLoaded', () => {
+            init();
+            
+            // Inizializza le icone dopo un breve delay
+            setTimeout(() => {
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+            }, 100);
+        });
     </script>
 </body>
 </html>

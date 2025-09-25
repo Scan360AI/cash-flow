@@ -302,6 +302,11 @@ body {
     box-shadow: var(--shadow-sm);
 }
 
+.table-container {
+    overflow-x: auto;
+    border-radius: var(--border-radius);
+}
+
 .movimenti-table thead {
     background: var(--bg-tertiary);
 }
@@ -370,6 +375,179 @@ body {
 .tipo-uscita {
     color: var(--error);
     font-weight: 600;
+}
+
+/* Action buttons nella tabella */
+.actions-cell {
+    white-space: nowrap;
+    width: 160px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.movimenti-table tbody tr:hover .action-buttons {
+    opacity: 1;
+}
+
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 14px;
+}
+
+.btn-icon:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.btn-icon:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Pulsante eseguito/previsto */
+.btn-icon.pending {
+    background: var(--gray-200);
+    color: var(--gray-600);
+}
+
+.btn-icon.pending:hover {
+    background: var(--success);
+    color: white;
+}
+
+.btn-icon.executed {
+    background: var(--success);
+    color: white;
+}
+
+.btn-icon.executed:hover {
+    background: var(--gray-200);
+    color: var(--gray-600);
+}
+
+/* Pulsante bloccato/sbloccato */
+.btn-icon.unlocked {
+    background: var(--gray-200);
+    color: var(--gray-600);
+}
+
+.btn-icon.unlocked:hover {
+    background: var(--warning);
+    color: white;
+}
+
+.btn-icon.locked {
+    background: var(--warning);
+    color: white;
+}
+
+.btn-icon.locked:hover {
+    background: var(--gray-200);
+    color: var(--gray-600);
+}
+
+/* Altri pulsanti di azione */
+.btn-icon.edit {
+    background: var(--info);
+    color: white;
+}
+
+.btn-icon.edit:hover:not(:disabled) {
+    background: #2563eb;
+}
+
+.btn-icon.duplicate {
+    background: var(--gray-400);
+    color: white;
+}
+
+.btn-icon.duplicate:hover {
+    background: var(--gray-500);
+}
+
+.btn-icon.delete {
+    background: var(--error);
+    color: white;
+}
+
+.btn-icon.delete:hover:not(:disabled) {
+    background: #dc2626;
+}
+
+/* Categoria badge */
+.categoria-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    border-radius: 12px;
+    background: var(--gray-100);
+    color: var(--gray-700);
+    border: 1px solid var(--gray-200);
+}
+
+/* Saldo progressivo */
+.saldo-progressivo {
+    text-align: right;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.saldo-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.saldo-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.saldo-amount {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Colori saldo progressivo */
+.saldo-positivo {
+    color: var(--success);
+}
+
+.saldo-positivo .saldo-icon {
+    color: var(--success);
+}
+
+.saldo-allerta {
+    color: var(--warning);
+}
+
+.saldo-allerta .saldo-icon {
+    color: var(--warning);
+}
+
+.saldo-critico {
+    color: var(--error);
+}
+
+.saldo-critico .saldo-icon {
+    color: var(--error);
 }
 
 /* === 5. DRAG & DROP === */
@@ -503,5 +681,18 @@ body {
     .movimenti-table th,
     .movimenti-table td {
         padding: 0.75rem 0.5rem;
+    }
+    
+    .actions-cell {
+        width: 140px;
+    }
+    
+    .action-buttons {
+        gap: 0.25rem;
+    }
+    
+    .btn-icon {
+        width: 24px;
+        height: 24px;
     }
 }
