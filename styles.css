@@ -571,6 +571,7 @@ body {
     text-align: right;
     font-weight: 600;
     white-space: nowrap;
+    min-width: 120px;
 }
 
 .saldo-container {
@@ -587,6 +588,8 @@ body {
 
 .saldo-amount {
     font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 0.95rem;
 }
 
 /* Colori saldo progressivo */
