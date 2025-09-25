@@ -1,4 +1,3 @@
-// Configurazioni Supabase
 const SUPABASE_CONFIG = {
     url: 'https://pnrjsisykqzwvcdjdyri.supabase.co', // Sostituisci con il tuo Project URL
     key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmpzaXN5a3F6d3ZjZGpkeXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDM5MzAsImV4cCI6MjA3NDM3OTkzMH0.vpauNA2NYZlA9vIW7SItUvM3GuOxLAvFLdUQehNCQ-0' // Sostituisci con la tua Anon Key
