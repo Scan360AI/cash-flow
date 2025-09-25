@@ -221,6 +221,12 @@
 
         async function init() {
             try {
+                // Previeni inizializzazione multipla
+                if (app.isInitialized) {
+                    console.log('⚠️ App già inizializzata, ignorando...');
+                    return;
+                }
+                
                 // Controlla se Supabase è caricato
                 if (typeof window.supabase === 'undefined') {
                     throw new Error('Libreria Supabase non caricata. Controlla la connessione internet.');
@@ -274,11 +280,14 @@
                     throw dbError;
                 }
                 
-                // Setup event listeners
+                // Setup event listeners (SOLO UNA VOLTA)
                 setupEventListeners();
                 
                 // Imposta data odierna come default
                 document.getElementById('data').valueAsDate = new Date();
+                
+                // Marca come inizializzata
+                app.isInitialized = true;
                 
                 console.log('✅ App inizializzata correttamente');
                 
@@ -848,12 +857,6 @@
 
         // === EVENT LISTENERS ===
         function setupEventListeners() {
-            // Previeni setup multipli
-            if (app.isInitialized) {
-                console.log('⚠️ Event listeners già inizializzati');
-                return;
-            }
-            
             console.log('🎯 Inizializzando event listeners...');
             
             // Form movimento
@@ -934,7 +937,6 @@
                 categoriaSelect.value = ''; // Reset selezione categoria
             });
             
-            app.isInitialized = true;
             console.log('✅ Event listeners inizializzati');
         }
         
