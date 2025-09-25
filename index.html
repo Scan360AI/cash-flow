@@ -581,9 +581,9 @@
                 // Calcola nuovo saldo solo per movimenti non annullati
                 if (movimento.stato !== 'annullato') {
                     if (movimento.tipo === 'entrata') {
-                        saldoProgressivo += parseFloat(movimento.importo);
+                        saldoProgressivo += Math.abs(parseFloat(movimento.importo));
                     } else if (movimento.tipo === 'uscita') {
-                        saldoProgressivo -= parseFloat(movimento.importo);
+                        saldoProgressivo -= Math.abs(parseFloat(movimento.importo));
                     }
                 }
                 
@@ -620,7 +620,7 @@
                         </span>
                     </td>
                     <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
-                        ${movimento.tipo === 'entrata' ? '+' : '-'}${window.CONFIG_UTILS.formatCurrency(Math.abs(movimento.importo))}
+                        ${movimento.tipo === 'entrata' ? '+' : '−'}${window.CONFIG_UTILS.formatCurrency(Math.abs(movimento.importo))}
                     </td>
                     <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
                         ${movimento.tipo.charAt(0).toUpperCase() + movimento.tipo.slice(1)}
@@ -682,13 +682,16 @@
         }
 
         function updateSaldi() {
-            const entrate = app.movimenti
-                .filter(m => m.tipo === 'entrata' && m.stato !== 'annullato')
-                .reduce((sum, m) => sum + parseFloat(m.importo), 0);
+            // Considera solo movimenti non annullati
+            const movimentiValidi = app.movimenti.filter(m => m.stato !== 'annullato');
             
-            const uscite = app.movimenti
-                .filter(m => m.tipo === 'uscita' && m.stato !== 'annullato')
-                .reduce((sum, m) => sum + parseFloat(m.importo), 0);
+            const entrate = movimentiValidi
+                .filter(m => m.tipo === 'entrata')
+                .reduce((sum, m) => sum + Math.abs(parseFloat(m.importo)), 0);
+            
+            const uscite = movimentiValidi
+                .filter(m => m.tipo === 'uscita')
+                .reduce((sum, m) => sum + Math.abs(parseFloat(m.importo)), 0);
             
             app.saldoContabile = app.settings.saldoIniziale + entrate - uscite;
             app.saldoDisponibile = app.saldoContabile - app.settings.limiteScoperto;
@@ -697,8 +700,8 @@
             const saldoContabileEl = document.getElementById('saldo-contabile');
             const saldoDisponibileEl = document.getElementById('saldo-disponibile');
             
-            saldoContabileEl.textContent = CONFIG_UTILS.formatCurrency(app.saldoContabile);
-            saldoDisponibileEl.textContent = CONFIG_UTILS.formatCurrency(app.saldoDisponibile);
+            saldoContabileEl.textContent = window.CONFIG_UTILS.formatCurrency(app.saldoContabile);
+            saldoDisponibileEl.textContent = window.CONFIG_UTILS.formatCurrency(app.saldoDisponibile);
             
             // Applica classi colore
             saldoContabileEl.className = 'saldo-value ' + (app.saldoContabile >= 0 ? 'positive' : 'negative');
@@ -715,22 +718,32 @@
             app.editingId = null;
         }
 
-        function editMovimento(id) {
+        async function toggleEseguito(id) {
             const movimento = app.movimenti.find(m => m.id === id);
             if (!movimento) return;
             
-            // Popola form
-            document.getElementById('data').value = movimento.data;
-            document.getElementById('descrizione').value = movimento.descrizione;
-            document.getElementById('importo').value = Math.abs(movimento.importo);
-            document.getElementById('tipo').value = movimento.tipo;
-            document.getElementById('categoria').value = movimento.categoria_id;
-            document.getElementById('stato').value = movimento.stato;
+            try {
+                const nuovoStato = movimento.stato === 'eseguito' ? 'previsto' : 'eseguito';
+                await updateMovimento(id, { stato: nuovoStato });
+                console.log(`Movimento ${nuovoStato}`);
+            } catch (error) {
+                console.error('Errore aggiornamento stato:', error);
+                alert('Errore durante l\'aggiornamento dello stato');
+            }
+        }
+
+        async function toggleBloccato(id) {
+            const movimento = app.movimenti.find(m => m.id === id);
+            if (!movimento) return;
             
-            // Cambia stato form
-            document.getElementById('form-submit-text').textContent = 'Aggiorna Movimento';
-            document.getElementById('cancel-edit').style.display = 'block';
-            app.editingId = id;
+            try {
+                const nuovoStato = movimento.is_modificato ? false : true;
+                await updateMovimento(id, { is_modificato: nuovoStato });
+                console.log(`Movimento ${nuovoStato ? 'bloccato' : 'sbloccato'}`);
+            } catch (error) {
+                console.error('Errore toggle blocco:', error);
+                alert('Errore durante il blocco/sblocco del movimento');
+            }
         }
 
         async function duplicateMovimentoAction(id) {
@@ -747,6 +760,53 @@
         }
 
         function confirmDelete(id) {
+            const movimento = app.movimenti.find(m => m.id === id);
+            if (!movimento) return;
+            
+            // Controlla se il movimento è bloccato
+            if (movimento.is_modificato) {
+                alert('⚠️ Movimento bloccato. Sblocca prima di eliminare.');
+                return;
+            }
+            
+            showModal(
+                'Elimina Movimento',
+                'Sei sicuro di voler eliminare questo movimento? L\'operazione non può essere annullata.',
+                async () => {
+                    try {
+                        await deleteMovimento(id);
+                        console.log('Movimento eliminato con successo');
+                    } catch (error) {
+                        console.error('Errore eliminazione:', error);
+                        alert('Errore durante l\'eliminazione del movimento');
+                    }
+                }
+            );
+        }
+
+        async function duplicateMovimentoAction(id) {
+            const movimento = app.movimenti.find(m => m.id === id);
+            if (!movimento) return;
+            
+            try {
+                await duplicateMovimento(movimento);
+                console.log('Movimento duplicato con successo');
+            } catch (error) {
+                console.error('Errore duplicazione:', error);
+                alert('Errore durante la duplicazione del movimento');
+            }
+        }
+
+        function confirmDelete(id) {
+            const movimento = app.movimenti.find(m => m.id === id);
+            if (!movimento) return;
+            
+            // Controlla se il movimento è bloccato
+            if (movimento.is_modificato) {
+                alert('⚠️ Movimento bloccato. Sblocca prima di eliminare.');
+                return;
+            }
+            
             showModal(
                 'Elimina Movimento',
                 'Sei sicuro di voler eliminare questo movimento? L\'operazione non può essere annullata.',
