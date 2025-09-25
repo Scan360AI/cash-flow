@@ -72,6 +72,21 @@
 
     <script src="config.js"></script>
     <script>
+        // Configurazione di emergenza se config.js non si carica
+        if (typeof SUPABASE_CONFIG === 'undefined') {
+            console.warn('⚠️ config.js non caricato, usando configurazione inline');
+            
+            window.SUPABASE_CONFIG = {
+                url: 'https://pnrjsisykqzwvcdjdyri.supabase.co',
+                key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmpzaXN5a3F6d3ZjZGpkeXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDM5MzAsImV4cCI6MjA3NDM3OTkzMH0.vpauNA2NYZlA9vIW7SItUvM3GuOxLAvFLdUQehNCQ-0'
+            };
+            
+            window.APP_CONFIG = {
+                maxFutureMonths: 12,
+                defaultCurrency: '€',
+                dateFormat: 'DD/MM/YYYY'
+            };
+        }
         let supabaseClient;
         let logs = [];
         
