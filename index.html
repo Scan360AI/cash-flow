@@ -162,40 +162,40 @@
     <!-- JavaScript -->
     <script src="config.js"></script>
     <script>
-        // Configurazione di emergenza se config.js non si carica
-        if (typeof SUPABASE_CONFIG === 'undefined') {
-            console.warn('⚠️ config.js non caricato, usando configurazione inline');
-            
-            window.SUPABASE_CONFIG = {
-                url: 'https://pnrjsisykqzwvcdjdyri.supabase.co',
-                key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmpzaXN5a3F6d3ZjZGpkeXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDM5MzAsImV4cCI6MjA3NDM3OTkzMH0.vpauNA2NYZlA9vIW7SItUvM3GuOxLAvFLdUQehNCQ-0'
-            };
-            
-            window.APP_CONFIG = {
-                maxFutureMonths: 12,
-                defaultCurrency: '€',
-                dateFormat: 'DD/MM/YYYY'
-            };
-            
-            window.CONFIG_UTILS = {
-                formatCurrency: (amount) => {
-                    return new Intl.NumberFormat('it-IT', {
-                        style: 'currency',
-                        currency: 'EUR',
-                        minimumFractionDigits: 2
-                    }).format(amount);
-                },
-                formatDate: (date) => {
-                    return new Date(date).toLocaleDateString('it-IT');
-                },
-                parseDate: (dateString) => {
-                    const [day, month, year] = dateString.split('/');
-                    return new Date(year, month - 1, day).toISOString().split('T')[0];
-                }
-            };
-        } else {
-            console.log('✅ config.js caricato correttamente');
-        }
+        // === CONFIGURAZIONE DEFINITIVA ===
+        // Definisce la configurazione in modo che sia sempre disponibile
+        window.SUPABASE_CONFIG = window.SUPABASE_CONFIG || SUPABASE_CONFIG || {
+            url: 'https://pnrjsisykqzwvcdjdyri.supabase.co',
+            key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmpzaXN5a3F6d3ZjZGpkeXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDM5MzAsImV4cCI6MjA3NDM3OTkzMH0.vpauNA2NYZlA9vIW7SItUvM3GuOxLAvFLdUQehNCQ-0'
+        };
+        
+        window.APP_CONFIG = window.APP_CONFIG || APP_CONFIG || {
+            maxFutureMonths: 12,
+            defaultCurrency: '€',
+            dateFormat: 'DD/MM/YYYY'
+        };
+        
+        window.CONFIG_UTILS = window.CONFIG_UTILS || CONFIG_UTILS || {
+            formatCurrency: (amount) => {
+                return new Intl.NumberFormat('it-IT', {
+                    style: 'currency',
+                    currency: 'EUR',
+                    minimumFractionDigits: 2
+                }).format(amount);
+            },
+            formatDate: (date) => {
+                return new Date(date).toLocaleDateString('it-IT');
+            },
+            parseDate: (dateString) => {
+                const [day, month, year] = dateString.split('/');
+                return new Date(year, month - 1, day).toISOString().split('T')[0];
+            }
+        };
+        
+        console.log('✅ Configurazione caricata:', {
+            url: window.SUPABASE_CONFIG.url,
+            keyLength: window.SUPABASE_CONFIG.key.length
+        });
         // === STATO GLOBALE ===
         let supabase;
         let app = {
@@ -215,34 +215,14 @@
 
         async function init() {
             try {
-                // Aspetta un momento per assicurarsi che tutti gli script siano caricati
-                await new Promise(resolve => setTimeout(resolve, 100));
-                
                 // Controlla se Supabase è caricato
                 if (typeof window.supabase === 'undefined') {
                     throw new Error('Libreria Supabase non caricata. Controlla la connessione internet.');
                 }
                 
-                // Controlla configurazione (ora con controlli più robusti)
-                if (typeof SUPABASE_CONFIG === 'undefined' && typeof window.SUPABASE_CONFIG === 'undefined') {
-                    throw new Error('Configurazione Supabase non trovata. Controlla config.js o le credenziali inline.');
-                }
-                
-                // Usa la configurazione disponibile
-                const config = window.SUPABASE_CONFIG || SUPABASE_CONFIG;
-                
-                if (!config.url || config.url.includes('TUO-PROJECT-ID')) {
-                    throw new Error('URL Supabase non configurato correttamente');
-                }
-                
-                if (!config.key || config.key.includes('TUA-ANON-KEY')) {
-                    throw new Error('Anon Key Supabase non configurata correttamente');
-                }
-                
-                console.log('✅ Configurazione trovata:', {
-                    url: config.url,
-                    keyLength: config.key.length
-                });
+                // La configurazione è ora sempre disponibile
+                const config = window.SUPABASE_CONFIG;
+                console.log('🔧 Usando configurazione:', config.url);
                 
                 // Inizializza Supabase
                 console.log('Inizializzando Supabase...');
@@ -269,6 +249,7 @@
                     
                     // Mostra messaggio per creare le tabelle
                     showSetupMessage();
+                    return; // Non continuare se le tabelle non esistono
                 }
                 
                 console.log('✅ Connessione Supabase OK');
