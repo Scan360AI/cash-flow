@@ -561,12 +561,14 @@
         // === UI FUNCTIONS ===
         function updateCategorieSelect() {
             const select = document.getElementById('categoria');
+            if (!select) return; // Sicurezza
+            
             const currentValue = select.value;
             
             // Mantieni prima opzione
             const firstOption = select.children[0];
             select.innerHTML = '';
-            select.appendChild(firstOption);
+            if (firstOption) select.appendChild(firstOption);
             
             // Aggiungi categorie per tipo
             ['entrata', 'uscita'].forEach(tipo => {
@@ -591,8 +593,11 @@
         }
 
         function updateSettingsForm() {
-            document.getElementById('saldo-iniziale-quick').value = app.settings.saldoIniziale;
-            document.getElementById('limite-scoperto-quick').value = app.settings.limiteScoperto;
+            const saldoEl = document.getElementById('saldo-iniziale-quick');
+            const scopertorEl = document.getElementById('limite-scoperto-quick');
+            
+            if (saldoEl) saldoEl.value = app.settings.saldoIniziale;
+            if (scopertorEl) scopertorEl.value = app.settings.limiteScoperto;
         }
 
         async function saveSettingsQuick() {
@@ -617,6 +622,45 @@
             app.settings.limiteScoperto = settings.limite_scoperto;
             
             updateSaldi();
+        }
+
+        // === STORICIZZAZIONE ===
+        async function storicizzaEseguiti() {
+            const movimentiEseguiti = app.movimenti.filter(m => m.stato === 'eseguito');
+            
+            if (movimentiEseguiti.length === 0) {
+                alert('Nessun movimento eseguito da storicizzare');
+                return;
+            }
+            
+            showModal(
+                'Storicizza Movimenti',
+                `Vuoi spostare ${movimentiEseguiti.length} movimenti eseguiti nello storico? Questa operazione può essere annullata.`,
+                async () => {
+                    try {
+                        const ids = movimentiEseguiti.map(m => m.id);
+                        
+                        // Per ora usiamo un flag temporaneo (is_modificato come sostituto)
+                        // In futuro useremo la colonna storicizzato dedicata
+                        const { error } = await window.supabaseClient
+                            .from('movimenti')
+                            .update({ 
+                                stato: 'annullato', // Segna come annullato per nasconderli 
+                                updated_at: new Date().toISOString() 
+                            })
+                            .in('id', ids);
+                        
+                        if (error) throw error;
+                        
+                        console.log(`${ids.length} movimenti storicizzati (marcati come annullati)`);
+                        await loadMovimenti();
+                        alert(`${ids.length} movimenti spostati nello storico`);
+                    } catch (error) {
+                        console.error('Errore storicizzazione:', error);
+                        alert('Errore durante la storicizzazione');
+                    }
+                }
+            );
         }
 
         function renderTabella() {
