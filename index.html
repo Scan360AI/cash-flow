@@ -182,7 +182,22 @@
         async function init() {
             try {
                 // Inizializza Supabase
-                supabase = supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
+                const { createClient } = supabase;
+                window.supabaseClient = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
+                
+                // Test connessione
+                console.log('Testando connessione Supabase...');
+                const { data, error } = await window.supabaseClient
+                    .from('settings')
+                    .select('count', { count: 'exact', head: true });
+                
+                if (error) {
+                    console.error('Errore connessione Supabase:', error);
+                    alert(`Errore connessione database: ${error.message}`);
+                    return;
+                }
+                
+                console.log('✅ Connessione Supabase OK');
                 
                 // Carica dati iniziali
                 await loadCategorie();
@@ -195,36 +210,46 @@
                 // Imposta data odierna come default
                 document.getElementById('data').valueAsDate = new Date();
                 
-                console.log('App inizializzata correttamente');
+                console.log('✅ App inizializzata correttamente');
             } catch (error) {
                 console.error('Errore inizializzazione:', error);
-                alert('Errore di connessione al database. Controlla le configurazioni.');
+                alert('Errore di connessione al database. Controlla le configurazioni in config.js');
             }
         }
 
         // === DATABASE FUNCTIONS ===
         async function loadCategorie() {
-            const { data, error } = await supabase
+            console.log('Caricando categorie...');
+            const { data, error } = await window.supabaseClient
                 .from('categorie')
                 .select('*')
                 .eq('attiva', true)
                 .order('tipo', { ascending: true })
                 .order('nome', { ascending: true });
             
-            if (error) throw error;
+            if (error) {
+                console.error('Errore caricamento categorie:', error);
+                throw error;
+            }
             
+            console.log('Categorie caricate:', data);
             app.categorie = data || [];
             updateCategorieSelect();
         }
 
         async function loadSettings() {
-            const { data, error } = await supabase
+            console.log('Caricando impostazioni...');
+            const { data, error } = await window.supabaseClient
                 .from('settings')
                 .select('*')
                 .limit(1);
             
-            if (error) throw error;
+            if (error) {
+                console.error('Errore caricamento settings:', error);
+                throw error;
+            }
             
+            console.log('Settings caricati:', data);
             if (data && data.length > 0) {
                 app.settings = {
                     saldoIniziale: parseFloat(data[0].saldo_iniziale) || 0,
@@ -236,7 +261,8 @@
         }
 
         async function loadMovimenti() {
-            const { data, error } = await supabase
+            console.log('Caricando movimenti...');
+            const { data, error } = await window.supabaseClient
                 .from('movimenti')
                 .select(`
                     *,
@@ -245,46 +271,65 @@
                 .order('data', { ascending: true })
                 .order('posizione_ordinamento', { ascending: true });
             
-            if (error) throw error;
+            if (error) {
+                console.error('Errore caricamento movimenti:', error);
+                throw error;
+            }
             
+            console.log('Movimenti caricati:', data);
             app.movimenti = data || [];
             renderTabella();
             updateSaldi();
         }
 
         async function saveMovimento(movimento) {
-            const { data, error } = await supabase
+            console.log('Salvando movimento:', movimento);
+            const { data, error } = await window.supabaseClient
                 .from('movimenti')
                 .insert([movimento])
                 .select();
             
-            if (error) throw error;
+            if (error) {
+                console.error('Errore salvataggio movimento:', error);
+                throw error;
+            }
             
+            console.log('Movimento salvato:', data);
             await loadMovimenti();
             return data[0];
         }
 
         async function updateMovimento(id, updates) {
-            const { data, error } = await supabase
+            console.log('Aggiornando movimento:', id, updates);
+            const { data, error } = await window.supabaseClient
                 .from('movimenti')
                 .update(updates)
                 .eq('id', id)
                 .select();
             
-            if (error) throw error;
+            if (error) {
+                console.error('Errore aggiornamento movimento:', error);
+                throw error;
+            }
             
+            console.log('Movimento aggiornato:', data);
             await loadMovimenti();
             return data[0];
         }
 
         async function deleteMovimento(id) {
-            const { error } = await supabase
+            console.log('Eliminando movimento:', id);
+            const { error } = await window.supabaseClient
                 .from('movimenti')
                 .delete()
                 .eq('id', id);
             
-            if (error) throw error;
+            if (error) {
+                console.error('Errore eliminazione movimento:', error);
+                throw error;
+            }
             
+            console.log('Movimento eliminato');
             await loadMovimenti();
         }
 
@@ -299,6 +344,7 @@
                 posizione_ordinamento: movimento.posizione_ordinamento
             };
             
+            console.log('Duplicando movimento:', duplicato);
             return await saveMovimento(duplicato);
         }
 
@@ -309,12 +355,17 @@
                 updated_at: new Date().toISOString()
             };
 
-            const { error } = await supabase
+            console.log('Salvando impostazioni:', settings);
+            const { error } = await window.supabaseClient
                 .from('settings')
                 .upsert(settings);
             
-            if (error) throw error;
+            if (error) {
+                console.error('Errore salvataggio settings:', error);
+                throw error;
+            }
             
+            console.log('Impostazioni salvate');
             app.settings.saldoIniziale = settings.saldo_iniziale;
             app.settings.limiteScoperto = settings.limite_scoperto;
             
