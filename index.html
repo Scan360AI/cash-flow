@@ -162,6 +162,40 @@
     <!-- JavaScript -->
     <script src="config.js"></script>
     <script>
+        // Configurazione di emergenza se config.js non si carica
+        if (typeof SUPABASE_CONFIG === 'undefined') {
+            console.warn('⚠️ config.js non caricato, usando configurazione inline');
+            
+            window.SUPABASE_CONFIG = {
+                url: 'https://pnrjsisykqzwvcdjdyri.supabase.co',
+                key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmpzaXN5a3F6d3ZjZGpkeXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDM5MzAsImV4cCI6MjA3NDM3OTkzMH0.vpauNA2NYZlA9vIW7SItUvM3GuOxLAvFLdUQehNCQ-0'
+            };
+            
+            window.APP_CONFIG = {
+                maxFutureMonths: 12,
+                defaultCurrency: '€',
+                dateFormat: 'DD/MM/YYYY'
+            };
+            
+            window.CONFIG_UTILS = {
+                formatCurrency: (amount) => {
+                    return new Intl.NumberFormat('it-IT', {
+                        style: 'currency',
+                        currency: 'EUR',
+                        minimumFractionDigits: 2
+                    }).format(amount);
+                },
+                formatDate: (date) => {
+                    return new Date(date).toLocaleDateString('it-IT');
+                },
+                parseDate: (dateString) => {
+                    const [day, month, year] = dateString.split('/');
+                    return new Date(year, month - 1, day).toISOString().split('T')[0];
+                }
+            };
+        } else {
+            console.log('✅ config.js caricato correttamente');
+        }
         // === STATO GLOBALE ===
         let supabase;
         let app = {
@@ -181,20 +215,40 @@
 
         async function init() {
             try {
+                // Controlla se Supabase è caricato
+                if (typeof window.supabase === 'undefined') {
+                    throw new Error('Libreria Supabase non caricata. Controlla la connessione internet.');
+                }
+                
+                // Controlla configurazione
+                if (!window.SUPABASE_CONFIG) {
+                    throw new Error('File config.js non trovato o non caricato');
+                }
+                
+                if (!SUPABASE_CONFIG.url || SUPABASE_CONFIG.url === 'TUA_SUPABASE_URL') {
+                    throw new Error('URL Supabase non configurato in config.js');
+                }
+                
+                if (!SUPABASE_CONFIG.key || SUPABASE_CONFIG.key === 'TUA_SUPABASE_ANON_KEY') {
+                    throw new Error('Anon Key non configurata in config.js');
+                }
+                
                 // Inizializza Supabase
-                const { createClient } = supabase;
+                console.log('Inizializzando Supabase...');
+                const { createClient } = window.supabase;
                 window.supabaseClient = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
                 
-                // Test connessione
+                console.log('✅ Client Supabase creato');
+                
+                // Test connessione semplice
                 console.log('Testando connessione Supabase...');
                 const { data, error } = await window.supabaseClient
                     .from('settings')
-                    .select('count', { count: 'exact', head: true });
+                    .select('*', { count: 'exact', head: true });
                 
-                if (error) {
-                    console.error('Errore connessione Supabase:', error);
-                    alert(`Errore connessione database: ${error.message}`);
-                    return;
+                if (error && error.code !== 'PGRST106') {
+                    // PGRST106 = table not found, ma connessione OK
+                    throw new Error(`Errore connessione database: ${error.message}`);
                 }
                 
                 console.log('✅ Connessione Supabase OK');
@@ -211,9 +265,40 @@
                 document.getElementById('data').valueAsDate = new Date();
                 
                 console.log('✅ App inizializzata correttamente');
+                
+                // Mostra messaggio di successo
+                const headerTitle = document.querySelector('.header-title');
+                headerTitle.style.color = '#10b981';
+                setTimeout(() => {
+                    headerTitle.style.color = '';
+                }, 2000);
+                
             } catch (error) {
                 console.error('Errore inizializzazione:', error);
-                alert('Errore di connessione al database. Controlla le configurazioni in config.js');
+                
+                // Mostra errore nell'interfaccia
+                const headerTitle = document.querySelector('.header-title');
+                headerTitle.textContent = `❌ ${error.message}`;
+                headerTitle.style.color = '#ef4444';
+                
+                // Nascondi il resto dell'interfaccia
+                document.querySelector('.app-sidebar').style.display = 'none';
+                document.querySelector('.app-main').innerHTML = `
+                    <div class="card">
+                        <div class="card-content" style="text-align: center; padding: 3rem;">
+                            <h2 style="color: #ef4444; margin-bottom: 1rem;">🚨 Errore di Inizializzazione</h2>
+                            <p style="margin-bottom: 1rem; color: #6b7280;">${error.message}</p>
+                            <p style="font-size: 0.875rem; color: #9ca3af;">
+                                Controlla la console del browser (F12) per maggiori dettagli.
+                            </p>
+                            <button onclick="location.reload()" class="btn btn-primary" style="margin-top: 1rem;">
+                                🔄 Ricarica Pagina
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                alert(`🚨 Errore: ${error.message}\n\nControlla config.js e la connessione internet.`);
             }
         }
 
