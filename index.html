@@ -215,28 +215,39 @@
 
         async function init() {
             try {
+                // Aspetta un momento per assicurarsi che tutti gli script siano caricati
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
                 // Controlla se Supabase è caricato
                 if (typeof window.supabase === 'undefined') {
                     throw new Error('Libreria Supabase non caricata. Controlla la connessione internet.');
                 }
                 
-                // Controlla configurazione
-                if (!window.SUPABASE_CONFIG) {
-                    throw new Error('File config.js non trovato o non caricato');
+                // Controlla configurazione (ora con controlli più robusti)
+                if (typeof SUPABASE_CONFIG === 'undefined' && typeof window.SUPABASE_CONFIG === 'undefined') {
+                    throw new Error('Configurazione Supabase non trovata. Controlla config.js o le credenziali inline.');
                 }
                 
-                if (!SUPABASE_CONFIG.url || SUPABASE_CONFIG.url === 'TUA_SUPABASE_URL') {
-                    throw new Error('URL Supabase non configurato in config.js');
+                // Usa la configurazione disponibile
+                const config = window.SUPABASE_CONFIG || SUPABASE_CONFIG;
+                
+                if (!config.url || config.url.includes('TUO-PROJECT-ID')) {
+                    throw new Error('URL Supabase non configurato correttamente');
                 }
                 
-                if (!SUPABASE_CONFIG.key || SUPABASE_CONFIG.key === 'TUA_SUPABASE_ANON_KEY') {
-                    throw new Error('Anon Key non configurata in config.js');
+                if (!config.key || config.key.includes('TUA-ANON-KEY')) {
+                    throw new Error('Anon Key Supabase non configurata correttamente');
                 }
+                
+                console.log('✅ Configurazione trovata:', {
+                    url: config.url,
+                    keyLength: config.key.length
+                });
                 
                 // Inizializza Supabase
                 console.log('Inizializzando Supabase...');
                 const { createClient } = window.supabase;
-                window.supabaseClient = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
+                window.supabaseClient = createClient(config.url, config.key);
                 
                 console.log('✅ Client Supabase creato');
                 
@@ -246,17 +257,35 @@
                     .from('settings')
                     .select('*', { count: 'exact', head: true });
                 
-                if (error && error.code !== 'PGRST106') {
-                    // PGRST106 = table not found, ma connessione OK
-                    throw new Error(`Errore connessione database: ${error.message}`);
+                if (error && !['PGRST106', '42P01'].includes(error.code)) {
+                    // PGRST106 = table not found, 42P01 = table does not exist
+                    // Entrambi significano connessione OK ma tabella mancante
+                    console.warn('Possibile problema connessione:', error);
+                    throw new Error(`Errore connessione database: ${error.message}. Verifica le credenziali Supabase.`);
+                }
+                
+                if (error && ['PGRST106', '42P01'].includes(error.code)) {
+                    console.log('⚠️ Tabelle non trovate (normale al primo avvio)');
+                    
+                    // Mostra messaggio per creare le tabelle
+                    showSetupMessage();
                 }
                 
                 console.log('✅ Connessione Supabase OK');
                 
                 // Carica dati iniziali
-                await loadCategorie();
-                await loadSettings();
-                await loadMovimenti();
+                try {
+                    await loadCategorie();
+                    await loadSettings();
+                    await loadMovimenti();
+                } catch (dbError) {
+                    console.warn('Errore caricamento dati:', dbError);
+                    if (dbError.code === 'PGRST106' || dbError.code === '42P01') {
+                        showSetupMessage();
+                        return; // Non continuare se le tabelle non esistono
+                    }
+                    throw dbError;
+                }
                 
                 // Setup event listeners
                 setupEventListeners();
@@ -288,18 +317,59 @@
                         <div class="card-content" style="text-align: center; padding: 3rem;">
                             <h2 style="color: #ef4444; margin-bottom: 1rem;">🚨 Errore di Inizializzazione</h2>
                             <p style="margin-bottom: 1rem; color: #6b7280;">${error.message}</p>
-                            <p style="font-size: 0.875rem; color: #9ca3af;">
+                            <p style="font-size: 0.875rem; color: #9ca3af; margin-bottom: 1rem;">
                                 Controlla la console del browser (F12) per maggiori dettagli.
                             </p>
                             <button onclick="location.reload()" class="btn btn-primary" style="margin-top: 1rem;">
                                 🔄 Ricarica Pagina
                             </button>
+                            <button onclick="window.open('test-connection.html', '_blank')" class="btn btn-secondary" style="margin-top: 1rem; margin-left: 1rem;">
+                                🔧 Test Connessione
+                            </button>
                         </div>
                     </div>
                 `;
                 
-                alert(`🚨 Errore: ${error.message}\n\nControlla config.js e la connessione internet.`);
+                alert(`🚨 Errore: ${error.message}\n\nControlla la console per dettagli.`);
             }
+        }
+        
+        function showSetupMessage() {
+            document.querySelector('.app-sidebar').style.display = 'none';
+            document.querySelector('.app-main').innerHTML = `
+                <div class="card">
+                    <div class="card-content" style="text-align: center; padding: 3rem;">
+                        <h2 style="color: #f59e0b; margin-bottom: 1rem;">⚡ Setup Necessario</h2>
+                        <p style="margin-bottom: 1rem; color: #6b7280;">
+                            Connessione Supabase OK, ma le tabelle del database non esistono ancora.
+                        </p>
+                        <p style="margin-bottom: 2rem; color: #9ca3af; font-size: 0.875rem;">
+                            Devi creare le tabelle nel database prima di usare l'app.
+                        </p>
+                        
+                        <div style="background: #f3f4f6; padding: 1.5rem; border-radius: 8px; text-align: left; margin-bottom: 2rem;">
+                            <h3 style="margin-bottom: 1rem; color: #374151;">📋 Passi da seguire:</h3>
+                            <ol style="color: #6b7280; line-height: 1.6;">
+                                <li>Vai su <strong>Supabase Dashboard</strong></li>
+                                <li>Seleziona il tuo progetto</li>
+                                <li>Vai in <strong>SQL Editor</strong></li>
+                                <li>Esegui le query SQL per creare le tabelle</li>
+                                <li>Torna qui e ricarica la pagina</li>
+                            </ol>
+                        </div>
+                        
+                        <button onclick="window.open('https://supabase.com/dashboard', '_blank')" class="btn btn-primary">
+                            🚀 Apri Supabase Dashboard
+                        </button>
+                        <button onclick="location.reload()" class="btn btn-secondary" style="margin-left: 1rem;">
+                            🔄 Ricarica Dopo Setup
+                        </button>
+                        <button onclick="window.open('test-connection.html', '_blank')" class="btn btn-secondary" style="margin-left: 1rem;">
+                            🔧 Strumenti di Test
+                        </button>
+                    </div>
+                </div>
+            `;
         }
 
         // === DATABASE FUNCTIONS ===
