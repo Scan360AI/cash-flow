@@ -123,8 +123,17 @@
             statusEl.className = 'status info';
             
             try {
-                const { createClient } = supabase;
+                // Controlla se Supabase è caricato
+                if (typeof window.supabase === 'undefined') {
+                    throw new Error('Libreria Supabase non caricata dalla CDN. Controlla la connessione internet.');
+                }
+                
+                log('Libreria Supabase caricata correttamente', 'success');
+                
+                const { createClient } = window.supabase;
                 supabaseClient = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
+                
+                log('Client Supabase creato', 'info');
                 
                 // Test semplice di connessione
                 const { data, error } = await supabaseClient
@@ -148,6 +157,11 @@
                 statusEl.innerHTML = `<strong>❌ Errore di connessione:</strong><br>${error.message}`;
                 statusEl.className = 'status error';
                 log(`Errore connessione: ${error.message}`, 'error');
+                
+                if (error.message.includes('Libreria Supabase')) {
+                    statusEl.innerHTML += '<br><br><strong>💡 Suggerimento:</strong> Controlla la connessione internet e ricarica la pagina.';
+                }
+                
                 return false;
             }
         }
