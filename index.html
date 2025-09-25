@@ -36,16 +36,12 @@
                     <i data-lucide="archive" class="menu-icon"></i>
                     <span>Storico</span>
                 </div>
-                <div class="menu-item">
-                    <i data-lucide="settings" class="menu-icon"></i>
-                    <span>Impostazioni</span>
-                </div>
             </div>
             
             <!-- Impostazioni veloci -->
             <div class="card" style="margin-top: 2rem;">
                 <div class="card-header">
-                    <h2 class="card-title">Impostazioni Rapide</h2>
+                    <h2 class="card-title">Impostazioni</h2>
                 </div>
                 <div class="card-content">
                     <div class="form-group">
@@ -199,16 +195,9 @@
     <script src="config.js"></script>
     <script>
         // === CONFIGURAZIONE DEFINITIVA ===
-        // Definisce la configurazione in modo che sia sempre disponibile
         window.SUPABASE_CONFIG = window.SUPABASE_CONFIG || SUPABASE_CONFIG || {
             url: 'https://pnrjsisykqzwvcdjdyri.supabase.co',
             key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmpzaXN5a3F6d3ZjZGpkeXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDM5MzAsImV4cCI6MjA3NDM3OTkzMH0.vpauNA2NYZlA9vIW7SItUvM3GuOxLAvFLdUQehNCQ-0'
-        };
-        
-        window.APP_CONFIG = window.APP_CONFIG || APP_CONFIG || {
-            maxFutureMonths: 12,
-            defaultCurrency: '€',
-            dateFormat: 'DD/MM/YYYY'
         };
         
         window.CONFIG_UTILS = window.CONFIG_UTILS || CONFIG_UTILS || {
@@ -221,20 +210,11 @@
             },
             formatDate: (date) => {
                 return new Date(date).toLocaleDateString('it-IT');
-            },
-            parseDate: (dateString) => {
-                const [day, month, year] = dateString.split('/');
-                return new Date(year, month - 1, day).toISOString().split('T')[0];
             }
         };
-        
-        console.log('✅ Configurazione caricata:', {
-            url: window.SUPABASE_CONFIG.url,
-            keyLength: window.SUPABASE_CONFIG.key.length
-        });
+
         // === STATO GLOBALE ===
-        let supabase;
-        let app = {
+        const app = {
             movimenti: [],
             categorie: [],
             settings: {
@@ -244,195 +224,36 @@
             saldoContabile: 0,
             saldoDisponibile: 0,
             editingId: null,
-            isInitialized: false,
-            currentView: 'movimenti' // movimenti, storico, impostazioni
+            initialized: false
         };
 
-        // === INIZIALIZZAZIONE ===
-        document.addEventListener('DOMContentLoaded', init);
+        let supabaseClient;
 
-        async function init() {
-            try {
-                // Previeni inizializzazione multipla
-                if (app.isInitialized) {
-                    console.log('⚠️ App già inizializzata, ignorando...');
-                    return;
-                }
-                
-                // Controlla se Supabase è caricato
-                if (typeof window.supabase === 'undefined') {
-                    throw new Error('Libreria Supabase non caricata. Controlla la connessione internet.');
-                }
-                
-                // La configurazione è ora sempre disponibile
-                const config = window.SUPABASE_CONFIG;
-                console.log('🔧 Usando configurazione:', config.url);
-                
-                // Inizializza Supabase
-                console.log('Inizializzando Supabase...');
-                const { createClient } = window.supabase;
-                window.supabaseClient = createClient(config.url, config.key);
-                
-                console.log('✅ Client Supabase creato');
-                
-                // Test connessione semplice
-                console.log('Testando connessione Supabase...');
-                const { data, error } = await window.supabaseClient
-                    .from('settings')
-                    .select('*', { count: 'exact', head: true });
-                
-                if (error && !['PGRST106', '42P01'].includes(error.code)) {
-                    // PGRST106 = table not found, 42P01 = table does not exist
-                    // Entrambi significano connessione OK ma tabella mancante
-                    console.warn('Possibile problema connessione:', error);
-                    throw new Error(`Errore connessione database: ${error.message}. Verifica le credenziali Supabase.`);
-                }
-                
-                if (error && ['PGRST106', '42P01'].includes(error.code)) {
-                    console.log('⚠️ Tabelle non trovate (normale al primo avvio)');
-                    
-                    // Mostra messaggio per creare le tabelle
-                    showSetupMessage();
-                    return; // Non continuare se le tabelle non esistono
-                }
-                
-                console.log('✅ Connessione Supabase OK');
-                
-                // Carica dati iniziali
-                try {
-                    await loadCategorie();
-                    await loadSettings();
-                    await loadMovimenti();
-                } catch (dbError) {
-                    console.warn('Errore caricamento dati:', dbError);
-                    if (dbError.code === 'PGRST106' || dbError.code === '42P01') {
-                        showSetupMessage();
-                        return; // Non continuare se le tabelle non esistono
-                    }
-                    throw dbError;
-                }
-                
-                // Setup event listeners (SOLO UNA VOLTA)
-                setupEventListeners();
-                
-                // Imposta data odierna come default
-                document.getElementById('data').valueAsDate = new Date();
-                
-                // Marca come inizializzata
-                app.isInitialized = true;
-                
-                console.log('✅ App inizializzata correttamente');
-                
-                // Mostra messaggio di successo
-                const headerTitle = document.querySelector('.header-title');
-                headerTitle.style.color = '#10b981';
-                setTimeout(() => {
-                    headerTitle.style.color = '';
-                }, 2000);
-                
-            } catch (error) {
-                console.error('Errore inizializzazione:', error);
-                
-                // Mostra errore nell'interfaccia
-                const headerTitle = document.querySelector('.header-title');
-                headerTitle.textContent = `❌ ${error.message}`;
-                headerTitle.style.color = '#ef4444';
-                
-                // Nascondi il resto dell'interfaccia
-                document.querySelector('.app-sidebar').style.display = 'none';
-                document.querySelector('.app-main').innerHTML = `
-                    <div class="card">
-                        <div class="card-content" style="text-align: center; padding: 3rem;">
-                            <h2 style="color: #ef4444; margin-bottom: 1rem;">🚨 Errore di Inizializzazione</h2>
-                            <p style="margin-bottom: 1rem; color: #6b7280;">${error.message}</p>
-                            <p style="font-size: 0.875rem; color: #9ca3af; margin-bottom: 1rem;">
-                                Controlla la console del browser (F12) per maggiori dettagli.
-                            </p>
-                            <button onclick="location.reload()" class="btn btn-primary" style="margin-top: 1rem;">
-                                🔄 Ricarica Pagina
-                            </button>
-                            <button onclick="window.open('test-connection.html', '_blank')" class="btn btn-secondary" style="margin-top: 1rem; margin-left: 1rem;">
-                                🔧 Test Connessione
-                            </button>
-                        </div>
-                    </div>
-                `;
-                
-                alert(`🚨 Errore: ${error.message}\n\nControlla la console per dettagli.`);
-            }
-        }
-        
-        function showSetupMessage() {
-            document.querySelector('.app-sidebar').style.display = 'none';
-            document.querySelector('.app-main').innerHTML = `
-                <div class="card">
-                    <div class="card-content" style="text-align: center; padding: 3rem;">
-                        <h2 style="color: #f59e0b; margin-bottom: 1rem;">⚡ Setup Necessario</h2>
-                        <p style="margin-bottom: 1rem; color: #6b7280;">
-                            Connessione Supabase OK, ma le tabelle del database non esistono ancora.
-                        </p>
-                        <p style="margin-bottom: 2rem; color: #9ca3af; font-size: 0.875rem;">
-                            Devi creare le tabelle nel database prima di usare l'app.
-                        </p>
-                        
-                        <div style="background: #f3f4f6; padding: 1.5rem; border-radius: 8px; text-align: left; margin-bottom: 2rem;">
-                            <h3 style="margin-bottom: 1rem; color: #374151;">📋 Passi da seguire:</h3>
-                            <ol style="color: #6b7280; line-height: 1.6;">
-                                <li>Vai su <strong>Supabase Dashboard</strong></li>
-                                <li>Seleziona il tuo progetto</li>
-                                <li>Vai in <strong>SQL Editor</strong></li>
-                                <li>Esegui le query SQL per creare le tabelle</li>
-                                <li>Torna qui e ricarica la pagina</li>
-                            </ol>
-                        </div>
-                        
-                        <button onclick="window.open('https://supabase.com/dashboard', '_blank')" class="btn btn-primary">
-                            🚀 Apri Supabase Dashboard
-                        </button>
-                        <button onclick="location.reload()" class="btn btn-secondary" style="margin-left: 1rem;">
-                            🔄 Ricarica Dopo Setup
-                        </button>
-                        <button onclick="window.open('test-connection.html', '_blank')" class="btn btn-secondary" style="margin-left: 1rem;">
-                            🔧 Strumenti di Test
-                        </button>
-                    </div>
-                </div>
-            `;
-        }
-
-        // === DATABASE FUNCTIONS ===
+        // === FUNZIONI DATABASE ===
         async function loadCategorie() {
             console.log('Caricando categorie...');
-            const { data, error } = await window.supabaseClient
+            const { data, error } = await supabaseClient
                 .from('categorie')
                 .select('*')
                 .eq('attiva', true)
                 .order('tipo', { ascending: true })
                 .order('nome', { ascending: true });
             
-            if (error) {
-                console.error('Errore caricamento categorie:', error);
-                throw error;
-            }
+            if (error) throw error;
             
-            console.log('Categorie caricate:', data);
             app.categorie = data || [];
             updateCategorieSelect();
         }
 
         async function loadSettings() {
             console.log('Caricando impostazioni...');
-            const { data, error } = await window.supabaseClient
+            const { data, error } = await supabaseClient
                 .from('settings')
                 .select('*')
                 .limit(1);
             
-            if (error) {
-                console.error('Errore caricamento settings:', error);
-                throw error;
-            }
+            if (error) throw error;
             
-            console.log('Settings caricati:', data);
             if (data && data.length > 0) {
                 app.settings = {
                     saldoIniziale: parseFloat(data[0].saldo_iniziale) || 0,
@@ -445,132 +266,79 @@
 
         async function loadMovimenti() {
             console.log('Caricando movimenti...');
-            const { data, error } = await window.supabaseClient
+            const { data, error } = await supabaseClient
                 .from('movimenti')
-                .select(`
-                    *,
-                    categoria:categorie(nome, colore)
-                `)
-                // Temporaneamente commentiamo il filtro storicizzato
-                // .eq('storicizzato', false) // Solo movimenti attivi
-                .order('data', { ascending: true })
-                .order('posizione_ordinamento', { ascending: true });
+                .select(`*, categoria:categorie(nome, colore)`)
+                .order('data', { ascending: true });
             
-            if (error) {
-                console.error('Errore caricamento movimenti:', error);
-                throw error;
-            }
+            if (error) throw error;
             
-            console.log('Movimenti caricati:', data);
             app.movimenti = data || [];
             renderTabella();
             updateSaldi();
         }
 
         async function saveMovimento(movimento) {
-            console.log('🔄 Salvando movimento:', movimento);
-            
-            const { data, error } = await window.supabaseClient
+            const { data, error } = await supabaseClient
                 .from('movimenti')
                 .insert([movimento])
                 .select();
             
-            if (error) {
-                console.error('❌ Errore salvataggio movimento:', error);
-                throw error;
-            }
-            
-            console.log('✅ Movimento salvato:', data);
-            await loadMovimenti(); // Ricarica tutti i movimenti
+            if (error) throw error;
+            await loadMovimenti();
             return data[0];
         }
 
         async function updateMovimento(id, updates) {
-            console.log('Aggiornando movimento:', id, updates);
-            const { data, error } = await window.supabaseClient
+            const { data, error } = await supabaseClient
                 .from('movimenti')
                 .update(updates)
                 .eq('id', id)
                 .select();
             
-            if (error) {
-                console.error('Errore aggiornamento movimento:', error);
-                throw error;
-            }
-            
-            console.log('Movimento aggiornato:', data);
+            if (error) throw error;
             await loadMovimenti();
             return data[0];
         }
 
         async function deleteMovimento(id) {
-            console.log('Eliminando movimento:', id);
-            const { error } = await window.supabaseClient
+            const { error } = await supabaseClient
                 .from('movimenti')
                 .delete()
                 .eq('id', id);
             
-            if (error) {
-                console.error('Errore eliminazione movimento:', error);
-                throw error;
-            }
-            
-            console.log('Movimento eliminato');
+            if (error) throw error;
             await loadMovimenti();
-        }
-
-        async function duplicateMovimento(movimento) {
-            const duplicato = {
-                data: movimento.data,
-                descrizione: `${movimento.descrizione} (copia)`,
-                importo: movimento.importo,
-                categoria_id: movimento.categoria_id,
-                tipo: movimento.tipo,
-                stato: 'previsto', // Sempre previsto per i duplicati
-                posizione_ordinamento: movimento.posizione_ordinamento
-            };
-            
-            console.log('Duplicando movimento:', duplicato);
-            return await saveMovimento(duplicato);
         }
 
         async function saveSettings() {
             const settings = {
-                saldo_iniziale: parseFloat(document.getElementById('saldo-iniziale').value) || 0,
-                limite_scoperto: parseFloat(document.getElementById('limite-scoperto').value) || 0,
+                saldo_iniziale: parseFloat(document.getElementById('saldo-iniziale-quick').value) || 0,
+                limite_scoperto: parseFloat(document.getElementById('limite-scoperto-quick').value) || 0,
                 updated_at: new Date().toISOString()
             };
 
-            console.log('Salvando impostazioni:', settings);
-            const { error } = await window.supabaseClient
+            const { error } = await supabaseClient
                 .from('settings')
                 .upsert(settings);
             
-            if (error) {
-                console.error('Errore salvataggio settings:', error);
-                throw error;
-            }
+            if (error) throw error;
             
-            console.log('Impostazioni salvate');
             app.settings.saldoIniziale = settings.saldo_iniziale;
             app.settings.limiteScoperto = settings.limite_scoperto;
-            
             updateSaldi();
         }
 
-        // === UI FUNCTIONS ===
+        // === FUNZIONI UI ===
         function updateCategorieSelect() {
             const select = document.getElementById('categoria');
-            if (!select) return; // Sicurezza
+            if (!select) return;
             
             const currentValue = select.value;
-            
-            // Mantieni prima opzione
             const firstOption = select.children[0];
             select.innerHTML = '';
             if (firstOption) select.appendChild(firstOption);
             
-            // Aggiungi categorie per tipo
             ['entrata', 'uscita'].forEach(tipo => {
                 const categorieTipo = app.categorie.filter(c => c.tipo === tipo);
                 if (categorieTipo.length > 0) {
@@ -588,7 +356,6 @@
                 }
             });
             
-            // Ripristina valore se possibile
             if (currentValue) select.value = currentValue;
         }
 
@@ -600,141 +367,78 @@
             if (scopertorEl) scopertorEl.value = app.settings.limiteScoperto;
         }
 
-        async function saveSettingsQuick() {
-            const settings = {
-                saldo_iniziale: parseFloat(document.getElementById('saldo-iniziale-quick').value) || 0,
-                limite_scoperto: parseFloat(document.getElementById('limite-scoperto-quick').value) || 0,
-                updated_at: new Date().toISOString()
-            };
-
-            console.log('Salvando impostazioni:', settings);
-            const { error } = await window.supabaseClient
-                .from('settings')
-                .upsert(settings);
+        function updateSaldi() {
+            const movimentiValidi = app.movimenti.filter(m => m.stato !== 'annullato');
             
-            if (error) {
-                console.error('Errore salvataggio settings:', error);
-                throw error;
-            }
+            const entrate = movimentiValidi
+                .filter(m => m.tipo === 'entrata')
+                .reduce((sum, m) => sum + Math.abs(parseFloat(m.importo)), 0);
             
-            console.log('Impostazioni salvate');
-            app.settings.saldoIniziale = settings.saldo_iniziale;
-            app.settings.limiteScoperto = settings.limite_scoperto;
+            const uscite = movimentiValidi
+                .filter(m => m.tipo === 'uscita')
+                .reduce((sum, m) => sum + Math.abs(parseFloat(m.importo)), 0);
             
-            updateSaldi();
-        }
-
-        // === STORICIZZAZIONE ===
-        async function storicizzaEseguiti() {
-            const movimentiEseguiti = app.movimenti.filter(m => m.stato === 'eseguito');
+            app.saldoContabile = app.settings.saldoIniziale + entrate - uscite;
+            app.saldoDisponibile = app.saldoContabile - app.settings.limiteScoperto;
             
-            if (movimentiEseguiti.length === 0) {
-                alert('Nessun movimento eseguito da storicizzare');
-                return;
-            }
+            const saldoContabileEl = document.getElementById('saldo-contabile');
+            const saldoDisponibileEl = document.getElementById('saldo-disponibile');
             
-            showModal(
-                'Storicizza Movimenti',
-                `Vuoi spostare ${movimentiEseguiti.length} movimenti eseguiti nello storico? Questa operazione può essere annullata.`,
-                async () => {
-                    try {
-                        const ids = movimentiEseguiti.map(m => m.id);
-                        
-                        // Per ora usiamo un flag temporaneo (is_modificato come sostituto)
-                        // In futuro useremo la colonna storicizzato dedicata
-                        const { error } = await window.supabaseClient
-                            .from('movimenti')
-                            .update({ 
-                                stato: 'annullato', // Segna come annullato per nasconderli 
-                                updated_at: new Date().toISOString() 
-                            })
-                            .in('id', ids);
-                        
-                        if (error) throw error;
-                        
-                        console.log(`${ids.length} movimenti storicizzati (marcati come annullati)`);
-                        await loadMovimenti();
-                        alert(`${ids.length} movimenti spostati nello storico`);
-                    } catch (error) {
-                        console.error('Errore storicizzazione:', error);
-                        alert('Errore durante la storicizzazione');
-                    }
-                }
-            );
+            if (saldoContabileEl) saldoContabileEl.textContent = window.CONFIG_UTILS.formatCurrency(app.saldoContabile);
+            if (saldoDisponibileEl) saldoDisponibileEl.textContent = window.CONFIG_UTILS.formatCurrency(app.saldoDisponibile);
         }
 
         function renderTabella() {
             const tbody = document.getElementById('movimenti-tbody');
-            
-            // Verifica che l'elemento esista
-            if (!tbody) {
-                console.error('❌ Elemento movimenti-tbody non trovato');
-                return;
-            }
+            if (!tbody) return;
             
             if (app.movimenti.length === 0) {
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="8" style="text-align: center; padding: 3rem; color: var(--gray-500);">
-                            Nessun movimento presente. Clicca "Nuovo Movimento" per aggiungere il primo.
+                            Nessun movimento presente. Clicca "Nuovo Movimento" per iniziare.
                         </td>
                     </tr>
                 `;
                 return;
             }
             
-            // Ordina movimenti per data (cronologico per calcolo saldo progressivo)
-            const movimentiOrdinati = [...app.movimenti].sort((a, b) => {
-                const dateA = new Date(a.data);
-                const dateB = new Date(b.data);
-                if (dateA.getTime() === dateB.getTime()) {
-                    return (a.posizione_ordinamento || 0) - (b.posizione_ordinamento || 0);
-                }
-                return dateA - dateB;
-            });
-            
-            // Calcola saldi progressivi
+            // Calcolo saldi progressivi
             let saldoProgressivo = app.settings.saldoIniziale;
             
-            const movimentiConSaldo = movimentiOrdinati.map(movimento => {
-                // Calcola nuovo saldo solo per movimenti non annullati
-                if (movimento.stato !== 'annullato') {
-                    if (movimento.tipo === 'entrata') {
-                        saldoProgressivo += Math.abs(parseFloat(movimento.importo));
-                    } else if (movimento.tipo === 'uscita') {
-                        saldoProgressivo -= Math.abs(parseFloat(movimento.importo));
+            const movimentiConSaldo = [...app.movimenti]
+                .sort((a, b) => new Date(a.data) - new Date(b.data))
+                .map(movimento => {
+                    if (movimento.stato !== 'annullato') {
+                        if (movimento.tipo === 'entrata') {
+                            saldoProgressivo += Math.abs(parseFloat(movimento.importo));
+                        } else {
+                            saldoProgressivo -= Math.abs(parseFloat(movimento.importo));
+                        }
                     }
-                }
-                
-                // Determina colore saldo
-                let saldoClass = '';
-                let saldoIcon = '';
-                
-                if (saldoProgressivo >= 0) {
-                    saldoClass = 'saldo-positivo';
-                    saldoIcon = 'check-circle';
-                } else if (saldoProgressivo > -app.settings.limiteScoperto) {
-                    saldoClass = 'saldo-allerta';
-                    saldoIcon = 'alert-triangle';
-                } else {
-                    saldoClass = 'saldo-critico';
-                    saldoIcon = 'x-circle';
-                }
-                
-                return {
-                    ...movimento,
-                    saldoProgressivo,
-                    saldoClass,
-                    saldoIcon
-                };
-            });
+                    
+                    let saldoClass = 'saldo-positivo';
+                    let saldoIcon = 'check-circle';
+                    
+                    if (saldoProgressivo < 0) {
+                        if (saldoProgressivo > -app.settings.limiteScoperto) {
+                            saldoClass = 'saldo-allerta';
+                            saldoIcon = 'alert-triangle';
+                        } else {
+                            saldoClass = 'saldo-critico';
+                            saldoIcon = 'x-circle';
+                        }
+                    }
+                    
+                    return { ...movimento, saldoProgressivo, saldoClass, saldoIcon };
+                });
             
             tbody.innerHTML = movimentiConSaldo.map(movimento => `
-                <tr class="movimento-row" draggable="true" data-id="${movimento.id}">
+                <tr class="movimento-row" data-id="${movimento.id}">
                     <td>${window.CONFIG_UTILS.formatDate(movimento.data)}</td>
                     <td>${movimento.descrizione}</td>
                     <td>
-                        <span class="categoria-badge" style="background-color: ${movimento.categoria?.colore || '#e5e7eb'}20; border-color: ${movimento.categoria?.colore || '#d1d5db'};">
+                        <span class="categoria-badge" style="background-color: ${movimento.categoria?.colore || '#e5e7eb'}20;">
                             ${movimento.categoria?.nome || 'N/A'}
                         </span>
                     </td>
@@ -752,354 +456,204 @@
                     <td class="saldo-progressivo ${movimento.saldoClass}">
                         <div class="saldo-container">
                             <i data-lucide="${movimento.saldoIcon}" class="saldo-icon"></i>
-                            <span class="saldo-amount">${window.CONFIG_UTILS.formatCurrency(movimento.saldoProgressivo)}</span>
+                            <span>${window.CONFIG_UTILS.formatCurrency(movimento.saldoProgressivo)}</span>
                         </div>
                     </td>
                     <td class="actions-cell">
                         <div class="action-buttons">
                             <button class="btn-icon ${movimento.stato === 'eseguito' ? 'executed' : 'pending'}" 
-                                    onclick="toggleEseguito('${movimento.id}')" 
-                                    title="${movimento.stato === 'eseguito' ? 'Segna come previsto' : 'Segna come eseguito'}">
-                                <i data-lucide="${movimento.stato === 'eseguito' ? 'check-circle-2' : 'circle'}" 
-                                   style="width: 14px; height: 14px;"></i>
+                                    onclick="toggleEseguito('${movimento.id}')">
+                                <i data-lucide="${movimento.stato === 'eseguito' ? 'check-circle-2' : 'circle'}"></i>
                             </button>
-                            <button class="btn-icon ${movimento.is_modificato ? 'locked' : 'unlocked'}" 
-                                    onclick="toggleBloccato('${movimento.id}')" 
-                                    title="${movimento.is_modificato ? 'Sblocca movimento' : 'Blocca movimento'}">
-                                <i data-lucide="${movimento.is_modificato ? 'lock' : 'unlock'}" 
-                                   style="width: 14px; height: 14px;"></i>
+                            <button class="btn-icon edit" onclick="editMovimento('${movimento.id}')">
+                                <i data-lucide="edit"></i>
                             </button>
-                            <button class="btn-icon edit" 
-                                    onclick="editMovimento('${movimento.id}')" 
-                                    title="Modifica" 
-                                    ${movimento.is_modificato ? 'disabled' : ''}>
-                                <i data-lucide="edit" style="width: 14px; height: 14px;"></i>
+                            <button class="btn-icon duplicate" onclick="duplicateMovimento('${movimento.id}')">
+                                <i data-lucide="copy"></i>
                             </button>
-                            <button class="btn-icon duplicate" 
-                                    onclick="duplicateMovimentoAction('${movimento.id}')" 
-                                    title="Duplica">
-                                <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
-                            </button>
-                            <button class="btn-icon delete" 
-                                    onclick="confirmDelete('${movimento.id}')" 
-                                    title="Elimina"
-                                    ${movimento.is_modificato ? 'disabled' : ''}>
-                                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                            <button class="btn-icon delete" onclick="confirmDelete('${movimento.id}')">
+                                <i data-lucide="trash-2"></i>
                             </button>
                         </div>
                     </td>
                 </tr>
             `).join('');
             
-            // Inizializza le icone Lucide
-            if (typeof lucide !== 'undefined') {
-                lucide.createIcons();
-            }
-            
-            // Riabilita drag & drop
-            initDragDrop();
-        }
-
-        function updateSaldi() {
-            // Considera solo movimenti non annullati
-            const movimentiValidi = app.movimenti.filter(m => m.stato !== 'annullato');
-            
-            const entrate = movimentiValidi
-                .filter(m => m.tipo === 'entrata')
-                .reduce((sum, m) => sum + Math.abs(parseFloat(m.importo)), 0);
-            
-            const uscite = movimentiValidi
-                .filter(m => m.tipo === 'uscita')
-                .reduce((sum, m) => sum + Math.abs(parseFloat(m.importo)), 0);
-            
-            app.saldoContabile = app.settings.saldoIniziale + entrate - uscite;
-            app.saldoDisponibile = app.saldoContabile - app.settings.limiteScoperto;
-            
-            // Aggiorna UI
-            const saldoContabileEl = document.getElementById('saldo-contabile');
-            const saldoDisponibileEl = document.getElementById('saldo-disponibile');
-            
-            saldoContabileEl.textContent = window.CONFIG_UTILS.formatCurrency(app.saldoContabile);
-            saldoDisponibileEl.textContent = window.CONFIG_UTILS.formatCurrency(app.saldoDisponibile);
-            
-            // Applica classi colore
-            saldoContabileEl.className = 'saldo-value ' + (app.saldoContabile >= 0 ? 'positive' : 'negative');
-            saldoDisponibileEl.className = 'saldo-value ' + 
-                (app.saldoDisponibile >= 0 ? 'positive' : app.saldoDisponibile < -app.settings.limiteScoperto ? 'negative' : 'warning');
-        }
-
-        // === FORM HANDLERS === (Legacy - da rimuovere)
-        // Queste funzioni non servono più con le modal
-
-        async function toggleEseguito(id) {
-            const movimento = app.movimenti.find(m => m.id === id);
-            if (!movimento) return;
-            
-            try {
-                const nuovoStato = movimento.stato === 'eseguito' ? 'previsto' : 'eseguito';
-                await updateMovimento(id, { stato: nuovoStato });
-                console.log(`Movimento ${nuovoStato}`);
-            } catch (error) {
-                console.error('Errore aggiornamento stato:', error);
-                alert('Errore durante l\'aggiornamento dello stato');
-            }
-        }
-
-        async function toggleBloccato(id) {
-            const movimento = app.movimenti.find(m => m.id === id);
-            if (!movimento) return;
-            
-            try {
-                const nuovoStato = movimento.is_modificato ? false : true;
-                await updateMovimento(id, { is_modificato: nuovoStato });
-                console.log(`Movimento ${nuovoStato ? 'bloccato' : 'sbloccato'}`);
-            } catch (error) {
-                console.error('Errore toggle blocco:', error);
-                alert('Errore durante il blocco/sblocco del movimento');
-            }
-        }
-
-        async function duplicateMovimentoAction(id) {
-            const movimento = app.movimenti.find(m => m.id === id);
-            if (!movimento) return;
-            
-            try {
-                await duplicateMovimento(movimento);
-                console.log('Movimento duplicato con successo');
-            } catch (error) {
-                console.error('Errore duplicazione:', error);
-                alert('Errore durante la duplicazione del movimento');
-            }
-        }
-
-        function confirmDelete(id) {
-            const movimento = app.movimenti.find(m => m.id === id);
-            if (!movimento) return;
-            
-            // Controlla se il movimento è bloccato
-            if (movimento.is_modificato) {
-                alert('⚠️ Movimento bloccato. Sblocca prima di eliminare.');
-                return;
-            }
-            
-            showModal(
-                'Elimina Movimento',
-                'Sei sicuro di voler eliminare questo movimento? L\'operazione non può essere annullata.',
-                async () => {
-                    try {
-                        await deleteMovimento(id);
-                        console.log('Movimento eliminato con successo');
-                    } catch (error) {
-                        console.error('Errore eliminazione:', error);
-                        alert('Errore durante l\'eliminazione del movimento');
-                    }
-                }
-            );
-        }
-
-        async function duplicateMovimentoAction(id) {
-            const movimento = app.movimenti.find(m => m.id === id);
-            if (!movimento) return;
-            
-            try {
-                await duplicateMovimento(movimento);
-                console.log('Movimento duplicato con successo');
-            } catch (error) {
-                console.error('Errore duplicazione:', error);
-                alert('Errore durante la duplicazione del movimento');
-            }
-        }
-
-        function confirmDelete(id) {
-            const movimento = app.movimenti.find(m => m.id === id);
-            if (!movimento) return;
-            
-            // Controlla se il movimento è bloccato
-            if (movimento.is_modificato) {
-                alert('⚠️ Movimento bloccato. Sblocca prima di eliminare.');
-                return;
-            }
-            
-            showModal(
-                'Elimina Movimento',
-                'Sei sicuro di voler eliminare questo movimento? L\'operazione non può essere annullata.',
-                async () => {
-                    try {
-                        await deleteMovimento(id);
-                        console.log('Movimento eliminato con successo');
-                    } catch (error) {
-                        console.error('Errore eliminazione:', error);
-                        alert('Errore durante l\'eliminazione del movimento');
-                    }
-                }
-            );
+            lucide.createIcons();
         }
 
         // === MODAL FUNCTIONS ===
-        function showModal(title, message, onConfirm) {
+        function showMovimentoModal(movimento = null) {
+            const modal = document.getElementById('movimento-modal');
+            if (!modal) return;
+            
+            if (movimento) {
+                document.getElementById('movimento-modal-title').textContent = 'Modifica Movimento';
+                document.getElementById('movimento-save-text').textContent = 'Aggiorna';
+                
+                document.getElementById('data').value = movimento.data;
+                document.getElementById('descrizione').value = movimento.descrizione;
+                document.getElementById('importo').value = Math.abs(movimento.importo);
+                document.getElementById('tipo').value = movimento.tipo;
+                document.getElementById('categoria').value = movimento.categoria_id;
+                document.getElementById('stato').value = movimento.stato;
+                
+                app.editingId = movimento.id;
+            } else {
+                document.getElementById('movimento-modal-title').textContent = 'Nuovo Movimento';
+                document.getElementById('movimento-save-text').textContent = 'Salva';
+                
+                document.getElementById('movimento-form').reset();
+                document.getElementById('data').valueAsDate = new Date();
+                app.editingId = null;
+            }
+            
+            updateCategorieSelect();
+            modal.style.display = 'flex';
+        }
+
+        function hideMovimentoModal() {
+            const modal = document.getElementById('movimento-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function showConfirmModal(title, message, onConfirm) {
             document.getElementById('modal-title').textContent = title;
             document.getElementById('modal-message').textContent = message;
             document.getElementById('modal-overlay').style.display = 'flex';
             
             document.getElementById('modal-confirm').onclick = () => {
-                hideModal();
+                document.getElementById('modal-overlay').style.display = 'none';
                 onConfirm();
             };
         }
 
-        function hideModal() {
-            document.getElementById('modal-overlay').style.display = 'none';
+        // === AZIONI MOVIMENTI ===
+        async function toggleEseguito(id) {
+            const movimento = app.movimenti.find(m => m.id === id);
+            if (!movimento) return;
+            
+            const nuovoStato = movimento.stato === 'eseguito' ? 'previsto' : 'eseguito';
+            await updateMovimento(id, { stato: nuovoStato });
         }
 
-        // === DRAG & DROP ===
-        function initDragDrop() {
-            // Implementazione drag & drop sarà aggiunta nella prossima iterazione
-            console.log('Drag & Drop non ancora implementato');
+        function editMovimento(id) {
+            const movimento = app.movimenti.find(m => m.id === id);
+            if (movimento) showMovimentoModal(movimento);
         }
 
-        // === EVENT LISTENERS ===
-        function setupEventListeners() {
-            console.log('🎯 Inizializzando event listeners...');
+        async function duplicateMovimento(id) {
+            const movimento = app.movimenti.find(m => m.id === id);
+            if (!movimento) return;
             
-            // Verifica che gli elementi esistano prima di aggiungere listener
-            const addBtn = document.getElementById('add-movimento-btn');
-            const storicizzaBtn = document.getElementById('storicizza-btn');
-            const movimentoForm = document.getElementById('movimento-form');
-            const settingsBtn = document.getElementById('salva-impostazioni-quick');
+            const duplicato = {
+                data: movimento.data,
+                descrizione: movimento.descrizione + ' (copia)',
+                importo: movimento.importo,
+                categoria_id: movimento.categoria_id,
+                tipo: movimento.tipo,
+                stato: 'previsto'
+            };
             
-            if (!addBtn || !storicizzaBtn || !movimentoForm) {
-                console.error('❌ Elementi HTML mancanti:', {
-                    addBtn: !!addBtn,
-                    storicizzaBtn: !!storicizzaBtn,
-                    movimentoForm: !!movimentoForm
-                });
+            await saveMovimento(duplicato);
+        }
+
+        function confirmDelete(id) {
+            showConfirmModal(
+                'Elimina Movimento',
+                'Sei sicuro di voler eliminare questo movimento?',
+                () => deleteMovimento(id)
+            );
+        }
+
+        async function storicizzaEseguiti() {
+            const eseguiti = app.movimenti.filter(m => m.stato === 'eseguito');
+            if (eseguiti.length === 0) {
+                alert('Nessun movimento eseguito da storicizzare');
                 return;
             }
             
-            // Pulsante nuovo movimento
-            addBtn.addEventListener('click', () => {
-                showMovimentoModal();
-            });
+            showConfirmModal(
+                'Storicizza Movimenti',
+                `Vuoi spostare ${eseguiti.length} movimenti nello storico?`,
+                async () => {
+                    for (const movimento of eseguiti) {
+                        await updateMovimento(movimento.id, { stato: 'annullato' });
+                    }
+                    alert('Movimenti storicizzati');
+                }
+            );
+        }
+
+        // === INIZIALIZZAZIONE ===
+        async function initApp() {
+            if (app.initialized) {
+                console.log('App già inizializzata');
+                return;
+            }
             
-            // Pulsante storicizza
-            storicizzaBtn.addEventListener('click', storicizzaEseguiti);
+            app.initialized = true;
             
-            // Form movimento nella modal
-            movimentoForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
+            try {
+                console.log('Inizializzando app...');
                 
-                // Previeni doppio submit
-                const submitBtn = document.getElementById('movimento-modal-save');
-                if (!submitBtn || submitBtn.disabled) return;
+                // Inizializza Supabase
+                const { createClient } = supabase;
+                supabaseClient = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.key);
                 
-                submitBtn.disabled = true;
-                submitBtn.style.opacity = '0.6';
+                // Carica dati
+                await loadCategorie();
+                await loadSettings(); 
+                await loadMovimenti();
                 
-                const formData = {
-                    data: document.getElementById('data').value,
-                    descrizione: document.getElementById('descrizione').value.trim(),
-                    importo: parseFloat(document.getElementById('importo').value),
-                    categoria_id: document.getElementById('categoria').value,
-                    tipo: document.getElementById('tipo').value,
-                    stato: document.getElementById('stato').value,
-                    posizione_ordinamento: 0
-                    // storicizzato: false // Temporaneamente commentato
-                };
+                // Event listeners
+                document.getElementById('add-movimento-btn').addEventListener('click', () => showMovimentoModal());
+                document.getElementById('storicizza-btn').addEventListener('click', storicizzaEseguiti);
+                document.getElementById('salva-impostazioni-quick').addEventListener('click', saveSettings);
                 
-                console.log('📝 Submitting form data:', formData);
+                // Modal listeners
+                document.getElementById('movimento-modal-close').addEventListener('click', hideMovimentoModal);
+                document.getElementById('movimento-modal-cancel').addEventListener('click', hideMovimentoModal);
+                document.getElementById('modal-close').addEventListener('click', () => document.getElementById('modal-overlay').style.display = 'none');
+                document.getElementById('modal-cancel').addEventListener('click', () => document.getElementById('modal-overlay').style.display = 'none');
                 
-                try {
+                // Form submit
+                document.getElementById('movimento-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    
+                    const formData = {
+                        data: document.getElementById('data').value,
+                        descrizione: document.getElementById('descrizione').value,
+                        importo: parseFloat(document.getElementById('importo').value),
+                        categoria_id: document.getElementById('categoria').value,
+                        tipo: document.getElementById('tipo').value,
+                        stato: document.getElementById('stato').value
+                    };
+                    
                     if (app.editingId) {
                         await updateMovimento(app.editingId, formData);
-                        console.log('✅ Movimento aggiornato');
                     } else {
                         await saveMovimento(formData);
-                        console.log('✅ Movimento aggiunto');
                     }
+                    
                     hideMovimentoModal();
-                } catch (error) {
-                    console.error('❌ Errore salvataggio movimento:', error);
-                    alert('Errore durante il salvataggio del movimento');
-                } finally {
-                    // Riabilita il pulsante
-                    submitBtn.disabled = false;
-                    submitBtn.style.opacity = '1';
-                }
-            });
-            
-            // Modal movimento - chiusura
-            const modalClose = document.getElementById('movimento-modal-close');
-            const modalCancel = document.getElementById('movimento-modal-cancel');
-            const movimentoModal = document.getElementById('movimento-modal');
-            
-            if (modalClose) modalClose.addEventListener('click', hideMovimentoModal);
-            if (modalCancel) modalCancel.addEventListener('click', hideMovimentoModal);
-            if (movimentoModal) {
-                movimentoModal.addEventListener('click', (e) => {
-                    if (e.target === e.currentTarget) hideMovimentoModal();
                 });
+                
+                console.log('✅ App inizializzata con successo');
+                lucide.createIcons();
+                
+            } catch (error) {
+                console.error('Errore inizializzazione:', error);
+                app.initialized = false;
             }
-            
-            // Salva impostazioni quick
-            if (settingsBtn) {
-                settingsBtn.addEventListener('click', async () => {
-                    if (settingsBtn.disabled) return;
-                    
-                    settingsBtn.disabled = true;
-                    settingsBtn.style.opacity = '0.6';
-                    
-                    try {
-                        await saveSettingsQuick();
-                        alert('Impostazioni salvate con successo');
-                    } catch (error) {
-                        console.error('Errore salvataggio impostazioni:', error);
-                        alert('Errore durante il salvataggio delle impostazioni');
-                    } finally {
-                        settingsBtn.disabled = false;
-                        settingsBtn.style.opacity = '1';
-                    }
-                });
-            }
-            
-            // Modal conferma
-            const confirmModalClose = document.getElementById('modal-close');
-            const confirmModalCancel = document.getElementById('modal-cancel');
-            const confirmModalOverlay = document.getElementById('modal-overlay');
-            
-            if (confirmModalClose) confirmModalClose.addEventListener('click', hideModal);
-            if (confirmModalCancel) confirmModalCancel.addEventListener('click', hideModal);
-            if (confirmModalOverlay) {
-                confirmModalOverlay.addEventListener('click', (e) => {
-                    if (e.target === e.currentTarget) hideModal();
-                });
-            }
-            
-            // Filtro categorie per tipo nella modal
-            const tipoSelect = document.getElementById('tipo');
-            if (tipoSelect) {
-                tipoSelect.addEventListener('change', (e) => {
-                    const categoriaSelect = document.getElementById('categoria');
-                    if (categoriaSelect) {
-                        categoriaSelect.value = ''; // Reset selezione categoria
-                        updateCategorieSelect(); // Aggiorna le opzioni disponibili
-                    }
-                });
-            }
-            
-            console.log('✅ Event listeners inizializzati');
         }
-        
-        // Inizializza icone Lucide quando la pagina è pronta
-        document.addEventListener('DOMContentLoaded', () => {
-            init();
-            
-            // Inizializza le icone dopo un breve delay
-            setTimeout(() => {
-                if (typeof lucide !== 'undefined') {
-                    lucide.createIcons();
-                }
-            }, 100);
-        });
+
+        // Start app
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initApp);
+        } else {
+            initApp();
+        }
     </script>
 </body>
 </html>
