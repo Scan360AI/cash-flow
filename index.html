@@ -622,11 +622,17 @@
         function renderTabella() {
             const tbody = document.getElementById('movimenti-tbody');
             
+            // Verifica che l'elemento esista
+            if (!tbody) {
+                console.error('❌ Elemento movimenti-tbody non trovato');
+                return;
+            }
+            
             if (app.movimenti.length === 0) {
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="8" style="text-align: center; padding: 3rem; color: var(--gray-500);">
-                            Nessun movimento presente. Aggiungi il primo movimento dal form a sinistra.
+                            Nessun movimento presente. Clicca "Nuovo Movimento" per aggiungere il primo.
                         </td>
                     </tr>
                 `;
