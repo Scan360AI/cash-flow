@@ -451,7 +451,8 @@
                     *,
                     categoria:categorie(nome, colore)
                 `)
-                .eq('storicizzato', false) // Solo movimenti attivi
+                // Temporaneamente commentiamo il filtro storicizzato
+                // .eq('storicizzato', false) // Solo movimenti attivi
                 .order('data', { ascending: true })
                 .order('posizione_ordinamento', { ascending: true });
             
@@ -936,8 +937,8 @@
                     categoria_id: document.getElementById('categoria').value,
                     tipo: document.getElementById('tipo').value,
                     stato: document.getElementById('stato').value,
-                    posizione_ordinamento: 0,
-                    storicizzato: false
+                    posizione_ordinamento: 0
+                    // storicizzato: false // Temporaneamente commentato
                 };
                 
                 console.log('📝 Submitting form data:', formData);
