@@ -961,21 +961,36 @@
         function setupEventListeners() {
             console.log('🎯 Inizializzando event listeners...');
             
+            // Verifica che gli elementi esistano prima di aggiungere listener
+            const addBtn = document.getElementById('add-movimento-btn');
+            const storicizzaBtn = document.getElementById('storicizza-btn');
+            const movimentoForm = document.getElementById('movimento-form');
+            const settingsBtn = document.getElementById('salva-impostazioni-quick');
+            
+            if (!addBtn || !storicizzaBtn || !movimentoForm) {
+                console.error('❌ Elementi HTML mancanti:', {
+                    addBtn: !!addBtn,
+                    storicizzaBtn: !!storicizzaBtn,
+                    movimentoForm: !!movimentoForm
+                });
+                return;
+            }
+            
             // Pulsante nuovo movimento
-            document.getElementById('add-movimento-btn').addEventListener('click', () => {
+            addBtn.addEventListener('click', () => {
                 showMovimentoModal();
             });
             
             // Pulsante storicizza
-            document.getElementById('storicizza-btn').addEventListener('click', storicizzaEseguiti);
+            storicizzaBtn.addEventListener('click', storicizzaEseguiti);
             
             // Form movimento nella modal
-            document.getElementById('movimento-form').addEventListener('submit', async (e) => {
+            movimentoForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 
                 // Previeni doppio submit
                 const submitBtn = document.getElementById('movimento-modal-save');
-                if (submitBtn.disabled) return;
+                if (!submitBtn || submitBtn.disabled) return;
                 
                 submitBtn.disabled = true;
                 submitBtn.style.opacity = '0.6';
@@ -1013,45 +1028,63 @@
             });
             
             // Modal movimento - chiusura
-            document.getElementById('movimento-modal-close').addEventListener('click', hideMovimentoModal);
-            document.getElementById('movimento-modal-cancel').addEventListener('click', hideMovimentoModal);
-            document.getElementById('movimento-modal').addEventListener('click', (e) => {
-                if (e.target === e.currentTarget) hideMovimentoModal();
-            });
+            const modalClose = document.getElementById('movimento-modal-close');
+            const modalCancel = document.getElementById('movimento-modal-cancel');
+            const movimentoModal = document.getElementById('movimento-modal');
+            
+            if (modalClose) modalClose.addEventListener('click', hideMovimentoModal);
+            if (modalCancel) modalCancel.addEventListener('click', hideMovimentoModal);
+            if (movimentoModal) {
+                movimentoModal.addEventListener('click', (e) => {
+                    if (e.target === e.currentTarget) hideMovimentoModal();
+                });
+            }
             
             // Salva impostazioni quick
-            document.getElementById('salva-impostazioni-quick').addEventListener('click', async () => {
-                const btn = document.getElementById('salva-impostazioni-quick');
-                if (btn.disabled) return;
-                
-                btn.disabled = true;
-                btn.style.opacity = '0.6';
-                
-                try {
-                    await saveSettingsQuick();
-                    alert('Impostazioni salvate con successo');
-                } catch (error) {
-                    console.error('Errore salvataggio impostazioni:', error);
-                    alert('Errore durante il salvataggio delle impostazioni');
-                } finally {
-                    btn.disabled = false;
-                    btn.style.opacity = '1';
-                }
-            });
+            if (settingsBtn) {
+                settingsBtn.addEventListener('click', async () => {
+                    if (settingsBtn.disabled) return;
+                    
+                    settingsBtn.disabled = true;
+                    settingsBtn.style.opacity = '0.6';
+                    
+                    try {
+                        await saveSettingsQuick();
+                        alert('Impostazioni salvate con successo');
+                    } catch (error) {
+                        console.error('Errore salvataggio impostazioni:', error);
+                        alert('Errore durante il salvataggio delle impostazioni');
+                    } finally {
+                        settingsBtn.disabled = false;
+                        settingsBtn.style.opacity = '1';
+                    }
+                });
+            }
             
             // Modal conferma
-            document.getElementById('modal-close').addEventListener('click', hideModal);
-            document.getElementById('modal-cancel').addEventListener('click', hideModal);
-            document.getElementById('modal-overlay').addEventListener('click', (e) => {
-                if (e.target === e.currentTarget) hideModal();
-            });
+            const confirmModalClose = document.getElementById('modal-close');
+            const confirmModalCancel = document.getElementById('modal-cancel');
+            const confirmModalOverlay = document.getElementById('modal-overlay');
+            
+            if (confirmModalClose) confirmModalClose.addEventListener('click', hideModal);
+            if (confirmModalCancel) confirmModalCancel.addEventListener('click', hideModal);
+            if (confirmModalOverlay) {
+                confirmModalOverlay.addEventListener('click', (e) => {
+                    if (e.target === e.currentTarget) hideModal();
+                });
+            }
             
             // Filtro categorie per tipo nella modal
-            document.getElementById('tipo').addEventListener('change', (e) => {
-                const categoriaSelect = document.getElementById('categoria');
-                categoriaSelect.value = ''; // Reset selezione categoria
-                updateCategorieSelect(); // Aggiorna le opzioni disponibili
-            });
+            const tipoSelect = document.getElementById('tipo');
+            if (tipoSelect) {
+                tipoSelect.addEventListener('change', (e) => {
+                    const categoriaSelect = document.getElementById('categoria');
+                    if (categoriaSelect) {
+                        categoriaSelect.value = ''; // Reset selezione categoria
+                        updateCategorieSelect(); // Aggiorna le opzioni disponibili
+                    }
+                });
+            }
             
             console.log('✅ Event listeners inizializzati');
         }
