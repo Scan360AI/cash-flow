@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Connessione Supabase</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 2rem;
+            background: #f9fafb;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+        .status {
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+        }
+        .success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+        .error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        .info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+        .btn {
+            background: #6366f1;
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 0.5rem 0.5rem 0.5rem 0;
+        }
+        .btn:hover { background: #4f46e5; }
+        pre {
+            background: #f3f4f6;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.875rem;
+        }
+    </style>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Test Connessione Supabase</h1>
+        
+        <div id="config-status" class="status info">
+            <strong>📋 Controllando configurazione...</strong>
+        </div>
+        
+        <div id="connection-status" style="display:none"></div>
+        <div id="tables-status" style="display:none"></div>
+        <div id="data-status" style="display:none"></div>
+        
+        <div id="actions" style="display:none">
+            <button class="btn" onclick="createTables()">🔨 Crea Tabelle</button>
+            <button class="btn" onclick="insertSampleData()">📝 Inserisci Dati di Test</button>
+            <button class="btn" onclick="testFull()">🔄 Test Completo</button>
+        </div>
+        
+        <div id="logs">
+            <h3>📊 Log Dettagliati:</h3>
+            <pre id="log-content"></pre>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        let supabaseClient;
+        let logs = [];
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            logs.push(`[${timestamp}] ${type.toUpperCase()}: ${message}`);
+            document.getElementById('log-content').textContent = logs.join('\n');
+            console.log(`${type.toUpperCase()}: ${message}`);
+        }
+        
+        async function checkConfig() {
+            const configEl = document.getElementById('config-status');
+            
+            if (!window.SUPABASE_CONFIG) {
+                configEl.innerHTML = '<strong>❌ Errore:</strong> File config.js non trovato o non caricato';
+                configEl.className = 'status error';
+                return false;
+            }
+            
+            if (!SUPABASE_CONFIG.url || SUPABASE_CONFIG.url === 'TUA_SUPABASE_URL') {
+                configEl.innerHTML = '<strong>❌ Errore:</strong> URL Supabase non configurato in config.js';
+                configEl.className = 'status error';
+                log('URL Supabase non configurato', 'error');
+                return false;
+            }
+            
+            if (!SUPABASE_CONFIG.key || SUPABASE_CONFIG.key === 'TUA_SUPABASE_ANON_KEY') {
+                configEl.innerHTML = '<strong>❌ Errore:</strong> Anon Key non configurata in config.js';
+                configEl.className = 'status error';
+                log('Anon Key non configurata', 'error');
+                return false;
+            }
+            
+            configEl.innerHTML = '<strong>✅ Configurazione OK</strong><br>' +
+                `URL: ${SUPABASE_CONFIG.url}<br>` +
+                `Key: ${SUPABASE_CONFIG.key.substring(0, 20)}...`;
+            configEl.className = 'status success';
+            
+            log(`URL: ${SUPABASE_CONFIG.url}`, 'info');
+            log(`Key configurata: ${SUPABASE_CONFIG.key.length} caratteri`, 'info');
+            
+            return true;
+        }
+        
+        async function testConnection() {
+            const statusEl = document.getElementById('connection-status');
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = '<strong>🔄 Testando connessione...</strong>';
+            statusEl.className = 'status info';
+            
+            try {
+                const { createClient } = supabase;
+                supabaseClient = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.key);
+                
+                // Test semplice di connessione
+                const { data, error } = await supabaseClient
+                    .from('_non_existent_table_')
+                    .select('*')
+                    .limit(1);
+                
+                // Se arriviamo qui senza errori di autenticazione, la connessione funziona
+                if (error && error.code === 'PGRST106') {
+                    // Errore "table not found" - significa che la connessione funziona
+                    statusEl.innerHTML = '<strong>✅ Connessione Supabase OK</strong>';
+                    statusEl.className = 'status success';
+                    log('Connessione Supabase stabilita con successo', 'success');
+                    return true;
+                } else if (error) {
+                    throw error;
+                }
+                
+                return true;
+            } catch (error) {
+                statusEl.innerHTML = `<strong>❌ Errore di connessione:</strong><br>${error.message}`;
+                statusEl.className = 'status error';
+                log(`Errore connessione: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function checkTables() {
+            const statusEl = document.getElementById('tables-status');
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = '<strong>🔄 Verificando tabelle...</strong>';
+            statusEl.className = 'status info';
+            
+            const tables = ['settings', 'categorie', 'movimenti', 'template_ricorrenze', 'pagamenti_batch'];
+            const results = {};
+            
+            for (const table of tables) {
+                try {
+                    const { data, error } = await supabaseClient
+                        .from(table)
+                        .select('*', { count: 'exact', head: true });
+                    
+                    if (error) {
+                        results[table] = `❌ ${error.message}`;
+                        log(`Tabella ${table}: ${error.message}`, 'error');
+                    } else {
+                        results[table] = '✅ Esiste';
+                        log(`Tabella ${table}: OK`, 'success');
+                    }
+                } catch (error) {
+                    results[table] = `❌ ${error.message}`;
+                    log(`Tabella ${table}: ${error.message}`, 'error');
+                }
+            }
+            
+            const allExist = Object.values(results).every(r => r.includes('✅'));
+            
+            let html = '<strong>' + (allExist ? '✅ Tutte le tabelle esistono' : '⚠️ Alcune tabelle mancano') + '</strong><br>';
+            for (const [table, status] of Object.entries(results)) {
+                html += `${table}: ${status}<br>`;
+            }
+            
+            statusEl.innerHTML = html;
+            statusEl.className = allExist ? 'status success' : 'status error';
+            
+            return allExist;
+        }
+        
+        async function checkData() {
+            const statusEl = document.getElementById('data-status');
+            statusEl.style.display = 'block';
+            statusEl.innerHTML = '<strong>🔄 Verificando dati...</strong>';
+            statusEl.className = 'status info';
+            
+            try {
+                // Controlla categorie
+                const { data: categorie, error: errCat } = await supabaseClient
+                    .from('categorie')
+                    .select('*');
+                
+                // Controlla settings
+                const { data: settings, error: errSet } = await supabaseClient
+                    .from('settings')
+                    .select('*');
+                
+                // Controlla movimenti
+                const { data: movimenti, error: errMov } = await supabaseClient
+                    .from('movimenti')
+                    .select('*');
+                
+                if (errCat || errSet || errMov) {
+                    throw new Error('Errore lettura dati');
+                }
+                
+                let html = '<strong>📊 Stato Dati:</strong><br>';
+                html += `Categorie: ${categorie?.length || 0}<br>`;
+                html += `Settings: ${settings?.length || 0}<br>`;
+                html += `Movimenti: ${movimenti?.length || 0}<br>`;
+                
+                statusEl.innerHTML = html;
+                statusEl.className = 'status success';
+                
+                log(`Dati trovati - Categorie: ${categorie?.length}, Settings: ${settings?.length}, Movimenti: ${movimenti?.length}`, 'info');
+                
+                return true;
+            } catch (error) {
+                statusEl.innerHTML = `<strong>❌ Errore lettura dati:</strong><br>${error.message}`;
+                statusEl.className = 'status error';
+                log(`Errore lettura dati: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function createTables() {
+            log('Inizio creazione tabelle...', 'info');
+            
+            const sql = `
+-- 1. Settings
+CREATE TABLE IF NOT EXISTS settings (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    saldo_iniziale DECIMAL(10,2) DEFAULT 0,
+    limite_scoperto DECIMAL(10,2) DEFAULT 0,
+    valuta VARCHAR(3) DEFAULT '€',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 2. Categorie
+CREATE TABLE IF NOT EXISTS categorie (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    tipo VARCHAR(10) CHECK (tipo IN ('entrata', 'uscita')) NOT NULL,
+    colore VARCHAR(7) DEFAULT '#666666',
+    icona VARCHAR(50) DEFAULT 'circle',
+    attiva BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. Template ricorrenze
+CREATE TABLE IF NOT EXISTS template_ricorrenze (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    descrizione VARCHAR(255) NOT NULL,
+    importo DECIMAL(10,2) NOT NULL,
+    categoria_id UUID REFERENCES categorie(id),
+    frequenza VARCHAR(20) CHECK (frequenza IN ('giornaliero', 'settimanale', 'mensile')) NOT NULL,
+    giorno_riferimento INTEGER,
+    attivo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 4. Movimenti
+CREATE TABLE IF NOT EXISTS movimenti (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    data DATE NOT NULL,
+    descrizione VARCHAR(255) NOT NULL,
+    importo DECIMAL(10,2) NOT NULL,
+    categoria_id UUID REFERENCES categorie(id),
+    tipo VARCHAR(10) CHECK (tipo IN ('entrata', 'uscita')) NOT NULL,
+    stato VARCHAR(15) CHECK (stato IN ('previsto', 'eseguito', 'annullato')) DEFAULT 'previsto',
+    template_id UUID REFERENCES template_ricorrenze(id),
+    is_modificato BOOLEAN DEFAULT false,
+    posizione_ordinamento INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 5. Batch pagamenti
+CREATE TABLE IF NOT EXISTS pagamenti_batch (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    movimento_id UUID REFERENCES movimenti(id) ON DELETE CASCADE,
+    selezionato_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    eseguito_at TIMESTAMP WITH TIME ZONE,
+    note TEXT
+);`;
+
+            alert('Per creare le tabelle, copia questo SQL e eseguilo nel SQL Editor di Supabase:\n\n' + sql);
+            log('SQL per creazione tabelle generato', 'info');
+        }
+        
+        async function insertSampleData() {
+            try {
+                log('Inserimento dati di esempio...', 'info');
+                
+                // Inserisci categorie
+                const { error: catError } = await supabaseClient
+                    .from('categorie')
+                    .upsert([
+                        { nome: 'Vendite', tipo: 'entrata', colore: '#28a745', icona: 'euro' },
+                        { nome: 'Consulenze', tipo: 'entrata', colore: '#17a2b8', icona: 'briefcase' },
+                        { nome: 'Fornitori', tipo: 'uscita', colore: '#dc3545', icona: 'truck' },
+                        { nome: 'Stipendi', tipo: 'uscita', colore: '#fd7e14', icona: 'users' }
+                    ]);
+                
+                if (catError) throw catError;
+                
+                // Inserisci settings
+                const { error: setError } = await supabaseClient
+                    .from('settings')
+                    .upsert({ saldo_iniziale: 10000, limite_scoperto: 5000 });
+                
+                if (setError) throw setError;
+                
+                alert('✅ Dati di esempio inseriti con successo!');
+                log('Dati di esempio inseriti con successo', 'success');
+                
+                await testFull();
+            } catch (error) {
+                alert(`❌ Errore inserimento dati: ${error.message}`);
+                log(`Errore inserimento dati: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testFull() {
+            log('=== INIZIO TEST COMPLETO ===', 'info');
+            
+            const configOk = await checkConfig();
+            if (!configOk) return;
+            
+            const connectionOk = await testConnection();
+            if (!connectionOk) return;
+            
+            const tablesOk = await checkTables();
+            const dataOk = await checkData();
+            
+            document.getElementById('actions').style.display = 'block';
+            
+            if (tablesOk && dataOk) {
+                log('=== TEST COMPLETATO CON SUCCESSO ===', 'success');
+                alert('🎉 Tutto OK! Puoi usare l\'applicazione principale.');
+            } else {
+                log('=== TEST COMPLETATO CON ERRORI ===', 'error');
+            }
+        }
+        
+        // Auto-start
+        document.addEventListener('DOMContentLoaded', testFull);
+    </script>
+</body>
+</html>
