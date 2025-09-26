@@ -4,9 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestione Cassa</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        /* Evidenziazione movimenti modificati */
+        .movimento-modificato {
+            background-color: rgba(99, 102, 241, 0.05) !important;
+            border-left: 3px solid var(--primary);
+        }
+        
+        .movimento-modificato:hover {
+            background-color: rgba(99, 102, 241, 0.08) !important;
+        }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -346,7 +354,6 @@
         }
 
         async function repositionMovimento(draggedId, targetId, position) {
-            // Trova i movimenti coinvolti
             const draggedMovimento = app.movimenti.find(m => m.id === draggedId);
             const targetMovimento = app.movimenti.find(m => m.id === targetId);
             
@@ -354,32 +361,43 @@
                 throw new Error('Movimento non trovato');
             }
             
-            console.log('🔄 Spostamento:', {
+            console.log('🔄 Riposizionamento:', {
                 dragged: draggedMovimento.descrizione,
                 target: targetMovimento.descrizione,
                 position
             });
             
-            // Calcola la nuova data basata sulla posizione
-            let nuovaData;
-            const targetDate = new Date(targetMovimento.data);
+            // Calcola nuovo ordinamento per posizionamento relativo
+            const movimentiOrdinati = [...app.movimenti].sort((a, b) => {
+                const dateCompare = new Date(a.data) - new Date(b.data);
+                if (dateCompare !== 0) return dateCompare;
+                return (a.posizione_ordinamento || 0) - (b.posizione_ordinamento || 0);
+            });
+            
+            const targetIndex = movimentiOrdinati.findIndex(m => m.id === targetId);
+            let nuovoOrdinamento;
             
             if (position === 'before') {
-                // Cerca la prima data libera PRIMA del target
-                nuovaData = findPreviousAvailableDate(targetDate);
+                // Inserisce PRIMA del target
+                if (targetIndex > 0) {
+                    const precedente = movimentiOrdinati[targetIndex - 1];
+                    nuovoOrdinamento = (precedente.posizione_ordinamento || 0) + 0.5;
+                } else {
+                    nuovoOrdinamento = (targetMovimento.posizione_ordinamento || 0) - 1;
+                }
             } else {
-                // Cerca la prima data libera DOPO il target  
-                nuovaData = findNextAvailableDate(targetDate);
+                // Inserisce DOPO il target
+                if (targetIndex < movimentiOrdinati.length - 1) {
+                    const successivo = movimentiOrdinati[targetIndex + 1];
+                    nuovoOrdinamento = ((targetMovimento.posizione_ordinamento || 0) + (successivo.posizione_ordinamento || 0)) / 2;
+                } else {
+                    nuovoOrdinamento = (targetMovimento.posizione_ordinamento || 0) + 1;
+                }
             }
             
-            // Calcola nuovo ordinamento se necessario
-            const maxOrdinamento = Math.max(...app.movimenti.map(m => m.posizione_ordinamento || 0));
-            const nuovoPosizionamento = maxOrdinamento + 1;
-            
-            // Aggiorna nel database
+            // Aggiorna SOLO il movimento trascinato
             const updates = {
-                data: nuovaData.toISOString().split('T')[0],
-                posizione_ordinamento: nuovoPosizionamento,
+                posizione_ordinamento: nuovoOrdinamento,
                 is_modificato: true,
                 updated_at: new Date().toISOString()
             };
@@ -388,8 +406,7 @@
             
             console.log('✅ Movimento riposizionato:', {
                 id: draggedId,
-                nuovaData: updates.data,
-                ordinamento: nuovoPosizionamento
+                nuovoOrdinamento: nuovoOrdinamento
             });
         }
 
@@ -700,14 +717,14 @@
                 });
             
             tbody.innerHTML = movimentiConSaldo.map(movimento => `
-                <tr class="movimento-row" data-id="${movimento.id}" draggable="true">
+                <tr class="movimento-row ${movimento.is_modificato ? 'movimento-modificato' : ''}" data-id="${movimento.id}" draggable="true">
                     <td class="drag-handle" style="text-align: center; color: var(--gray-400); cursor: move; user-select: none; font-weight: bold;">
                         ⋮⋮
                     </td>
                     <td>${window.CONFIG_UTILS.formatDate(movimento.data)}</td>
                     <td>
                         ${movimento.descrizione}
-                        ${movimento.is_modificato ? '<span style="color: var(--primary); font-size: 0.75em;">●</span>' : ''}
+                        ${movimento.is_modificato ? '<span style="color: var(--primary); font-size: 0.75em; margin-left: 4px;">●</span>' : ''}
                     </td>
                     <td>
                         <span class="categoria-badge" style="background-color: ${movimento.categoria?.colore || '#e5e7eb'}20;">
