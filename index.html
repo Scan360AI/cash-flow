@@ -87,6 +87,7 @@
                         <table class="movimenti-table">
                             <thead>
                                 <tr>
+                                    <th style="width: 40px;">⋮⋮</th>
                                     <th>Data</th>
                                     <th>Descrizione</th>
                                     <th>Categoria</th>
@@ -222,10 +223,202 @@
             saldoDisponibile: 0,
             editingId: null,
             initialized: false,
-            currentView: 'movimenti'
+            currentView: 'movimenti',
+            // Stato drag & drop
+            draggedElement: null,
+            draggedId: null,
+            dropTarget: null,
+            dropPosition: null
         };
 
         let supabaseClient;
+
+        // === DRAG & DROP SYSTEM ===
+        function initializeDragAndDrop() {
+            const tbody = document.getElementById('movimenti-tbody');
+            if (!tbody) return;
+
+            // Aggiungi event listeners per il drag & drop
+            tbody.addEventListener('dragstart', handleDragStart, false);
+            tbody.addEventListener('dragenter', handleDragEnter, false);
+            tbody.addEventListener('dragover', handleDragOver, false);
+            tbody.addEventListener('dragleave', handleDragLeave, false);
+            tbody.addEventListener('drop', handleDrop, false);
+            tbody.addEventListener('dragend', handleDragEnd, false);
+        }
+
+        function handleDragStart(e) {
+            if (!e.target.closest('.movimento-row')) return;
+            
+            const row = e.target.closest('.movimento-row');
+            app.draggedElement = row;
+            app.draggedId = row.dataset.id;
+            
+            row.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', row.outerHTML);
+            
+            console.log('🎯 Drag started:', app.draggedId);
+        }
+
+        function handleDragEnter(e) {
+            e.preventDefault();
+            if (!app.draggedElement) return;
+            
+            const row = e.target.closest('.movimento-row');
+            if (!row || row === app.draggedElement) return;
+            
+            clearDropIndicators();
+            
+            const rect = row.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            const mouseY = e.clientY;
+            
+            if (mouseY < midpoint) {
+                row.classList.add('drag-over-before');
+                app.dropPosition = 'before';
+            } else {
+                row.classList.add('drag-over-after');
+                app.dropPosition = 'after';
+            }
+            
+            app.dropTarget = row;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        }
+
+        function handleDragLeave(e) {
+            // Solo se usciamo completamente dalla riga
+            const row = e.target.closest('.movimento-row');
+            if (!row) return;
+            
+            const rect = row.getBoundingClientRect();
+            const x = e.clientX;
+            const y = e.clientY;
+            
+            if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+                clearDropIndicators();
+            }
+        }
+
+        async function handleDrop(e) {
+            e.preventDefault();
+            if (!app.draggedElement || !app.dropTarget) return;
+            
+            const draggedId = app.draggedId;
+            const targetId = app.dropTarget.dataset.id;
+            const position = app.dropPosition;
+            
+            console.log('📍 Drop:', { draggedId, targetId, position });
+            
+            try {
+                await repositionMovimento(draggedId, targetId, position);
+                console.log('✅ Riposizionamento completato');
+            } catch (error) {
+                console.error('❌ Errore riposizionamento:', error);
+                alert('Errore durante il riordino: ' + error.message);
+            }
+            
+            clearDropIndicators();
+        }
+
+        function handleDragEnd(e) {
+            if (app.draggedElement) {
+                app.draggedElement.classList.remove('dragging');
+            }
+            
+            clearDropIndicators();
+            app.draggedElement = null;
+            app.draggedId = null;
+            app.dropTarget = null;
+            app.dropPosition = null;
+        }
+
+        function clearDropIndicators() {
+            const rows = document.querySelectorAll('.movimento-row');
+            rows.forEach(row => {
+                row.classList.remove('drag-over-before', 'drag-over-after');
+            });
+        }
+
+        async function repositionMovimento(draggedId, targetId, position) {
+            // Trova i movimenti coinvolti
+            const draggedMovimento = app.movimenti.find(m => m.id === draggedId);
+            const targetMovimento = app.movimenti.find(m => m.id === targetId);
+            
+            if (!draggedMovimento || !targetMovimento) {
+                throw new Error('Movimento non trovato');
+            }
+            
+            console.log('🔄 Spostamento:', {
+                dragged: draggedMovimento.descrizione,
+                target: targetMovimento.descrizione,
+                position
+            });
+            
+            // Calcola la nuova data basata sulla posizione
+            let nuovaData;
+            const targetDate = new Date(targetMovimento.data);
+            
+            if (position === 'before') {
+                // Cerca la prima data libera PRIMA del target
+                nuovaData = findPreviousAvailableDate(targetDate);
+            } else {
+                // Cerca la prima data libera DOPO il target  
+                nuovaData = findNextAvailableDate(targetDate);
+            }
+            
+            // Calcola nuovo ordinamento se necessario
+            const maxOrdinamento = Math.max(...app.movimenti.map(m => m.posizione_ordinamento || 0));
+            const nuovoPosizionamento = maxOrdinamento + 1;
+            
+            // Aggiorna nel database
+            const updates = {
+                data: nuovaData.toISOString().split('T')[0],
+                posizione_ordinamento: nuovoPosizionamento,
+                is_modificato: true,
+                updated_at: new Date().toISOString()
+            };
+            
+            await updateMovimento(draggedId, updates);
+            
+            console.log('✅ Movimento riposizionato:', {
+                id: draggedId,
+                nuovaData: updates.data,
+                ordinamento: nuovoPosizionamento
+            });
+        }
+
+        function findPreviousAvailableDate(targetDate) {
+            // Cerca una data libera prima del target
+            const existingDates = app.movimenti.map(m => m.data).sort();
+            let checkDate = new Date(targetDate);
+            checkDate.setDate(checkDate.getDate() - 1);
+            
+            // Vai indietro fino a trovare una data libera
+            while (existingDates.includes(checkDate.toISOString().split('T')[0])) {
+                checkDate.setDate(checkDate.getDate() - 1);
+            }
+            
+            return checkDate;
+        }
+
+        function findNextAvailableDate(targetDate) {
+            // Cerca una data libera dopo il target
+            const existingDates = app.movimenti.map(m => m.data).sort();
+            let checkDate = new Date(targetDate);
+            checkDate.setDate(checkDate.getDate() + 1);
+            
+            // Vai avanti fino a trovare una data libera
+            while (existingDates.includes(checkDate.toISOString().split('T')[0])) {
+                checkDate.setDate(checkDate.getDate() + 1);
+            }
+            
+            return checkDate;
+        }
 
         // Funzioni database
         async function loadCategorie() {
@@ -262,10 +455,11 @@
                 .from('movimenti')
                 .select(`*, categoria:categorie(nome, colore)`)
                 .eq('storicizzato', false)
-                .order('data', { ascending: true });
+                .order('data', { ascending: true })
+                .order('posizione_ordinamento', { ascending: true });
             
             if (error) {
-                if (error.message.includes('storicizzato')) {
+                if (error.message.includes('storicizzato') || error.message.includes('posizione_ordinamento')) {
                     const { data: allData, error: fallbackError } = await supabaseClient
                         .from('movimenti')
                         .select(`*, categoria:categorie(nome, colore)`)
@@ -315,10 +509,27 @@
         }
 
         async function saveMovimento(movimento) {
+            // Aggiungi ordinamento automatico per nuovi movimenti
+            const maxOrdinamento = Math.max(...app.movimenti.map(m => m.posizione_ordinamento || 0));
+            movimento.posizione_ordinamento = maxOrdinamento + 1;
+            
             const { data, error } = await supabaseClient
                 .from('movimenti')
                 .insert([movimento])
                 .select();
+            
+            if (error && error.message.includes('posizione_ordinamento')) {
+                // Fallback per DB senza colonna posizione_ordinamento
+                delete movimento.posizione_ordinamento;
+                const { data: fallbackData, error: fallbackError } = await supabaseClient
+                    .from('movimenti')
+                    .insert([movimento])
+                    .select();
+                
+                if (fallbackError) throw fallbackError;
+                await loadMovimenti();
+                return fallbackData[0];
+            }
             
             if (error) throw error;
             await loadMovimenti();
@@ -331,6 +542,20 @@
                 .update(updates)
                 .eq('id', id)
                 .select();
+            
+            if (error && error.message.includes('posizione_ordinamento')) {
+                // Fallback per DB senza colonna posizione_ordinamento
+                delete updates.posizione_ordinamento;
+                const { data: fallbackData, error: fallbackError } = await supabaseClient
+                    .from('movimenti')
+                    .update(updates)
+                    .eq('id', id)
+                    .select();
+                
+                if (fallbackError) throw fallbackError;
+                await loadMovimenti();
+                return fallbackData[0];
+            }
             
             if (error) throw error;
             await loadMovimenti();
@@ -431,7 +656,7 @@
             if (app.movimenti.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="8" style="text-align: center; padding: 3rem; color: var(--gray-500);">
+                        <td colspan="9" style="text-align: center; padding: 3rem; color: var(--gray-500);">
                             Nessun movimento presente. Clicca "Nuovo Movimento" per iniziare.
                         </td>
                     </tr>
@@ -442,7 +667,12 @@
             let saldoProgressivo = app.settings.saldoIniziale;
             
             const movimentiConSaldo = [...app.movimenti]
-                .sort((a, b) => new Date(a.data) - new Date(b.data))
+                .sort((a, b) => {
+                    // Prima per data, poi per ordinamento custom
+                    const dateCompare = new Date(a.data) - new Date(b.data);
+                    if (dateCompare !== 0) return dateCompare;
+                    return (a.posizione_ordinamento || 0) - (b.posizione_ordinamento || 0);
+                })
                 .map(movimento => {
                     if (movimento.stato !== 'annullato') {
                         if (movimento.tipo === 'entrata') {
@@ -469,9 +699,15 @@
                 });
             
             tbody.innerHTML = movimentiConSaldo.map(movimento => `
-                <tr class="movimento-row" data-id="${movimento.id}">
+                <tr class="movimento-row" data-id="${movimento.id}" draggable="true">
+                    <td class="drag-handle" style="text-align: center; color: var(--gray-400); cursor: move; user-select: none; font-weight: bold;">
+                        ⋮⋮
+                    </td>
                     <td>${window.CONFIG_UTILS.formatDate(movimento.data)}</td>
-                    <td>${movimento.descrizione}</td>
+                    <td>
+                        ${movimento.descrizione}
+                        ${movimento.is_modificato ? '<span style="color: var(--primary); font-size: 0.75em;">●</span>' : ''}
+                    </td>
                     <td>
                         <span class="categoria-badge" style="background-color: ${movimento.categoria?.colore || '#e5e7eb'}20;">
                             ${movimento.categoria?.nome || 'N/A'}
@@ -515,6 +751,11 @@
             `).join('');
             
             lucide.createIcons();
+            
+            // Reinizializza drag & drop dopo render
+            setTimeout(() => {
+                initializeDragAndDrop();
+            }, 100);
         }
 
         function renderTabellaStorico() {
@@ -524,7 +765,7 @@
             if (app.movimentiStorico.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="8" style="text-align: center; padding: 3rem; color: var(--gray-500);">
+                        <td colspan="9" style="text-align: center; padding: 3rem; color: var(--gray-500);">
                             Nessun movimento nello storico.
                         </td>
                     </tr>
@@ -534,6 +775,9 @@
             
             tbody.innerHTML = app.movimentiStorico.map(movimento => `
                 <tr class="movimento-row storico-row" data-id="${movimento.id}">
+                    <td style="text-align: center; color: var(--gray-300); user-select: none; font-weight: bold;">
+                        ◦◦
+                    </td>
                     <td>${window.CONFIG_UTILS.formatDate(movimento.data)}</td>
                     <td>${movimento.descrizione}</td>
                     <td>
@@ -799,10 +1043,10 @@
                 });
                 
                 lucide.createIcons();
-                console.log('App inizializzata');
+                console.log('🚀 App inizializzata con Drag & Drop');
                 
             } catch (error) {
-                console.error('Errore:', error);
+                console.error('❌ Errore inizializzazione:', error);
                 app.initialized = false;
             }
         }
