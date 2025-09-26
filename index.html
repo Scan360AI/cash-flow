@@ -36,6 +36,10 @@
                     <i data-lucide="archive" class="menu-icon"></i>
                     <span>Storico</span>
                 </div>
+                <div class="menu-item" id="menu-categorie">
+                    <i data-lucide="tag" class="menu-icon"></i>
+                    <span>Categorie</span>
+                </div>
             </div>
             
             <!-- Impostazioni veloci -->
@@ -159,6 +163,37 @@
                         <select id="categoria" class="form-select" required>
                             <option value="">Seleziona categoria</option>
                         </select>
+                    </div>
+                    
+                    <!-- Sezione Ricorrenza -->
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" id="ricorrente" style="margin-right: 0.5rem;">
+                            Movimento Ricorrente
+                        </label>
+                        <div id="ricorrenza-options" style="display: none; margin-top: 1rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: 6px; background: var(--gray-50);">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label" for="frequenza">Frequenza</label>
+                                    <select id="frequenza" class="form-select">
+                                        <option value="giornaliero">Giornaliero</option>
+                                        <option value="settimanale">Settimanale</option>
+                                        <option value="mensile" selected>Mensile</option>
+                                        <option value="trimestrale">Trimestrale</option>
+                                        <option value="semestrale">Semestrale</option>
+                                        <option value="annuale">Annuale</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="durata-mesi">Genera per (mesi)</label>
+                                    <input type="number" id="durata-mesi" class="form-input" min="1" max="24" value="12">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="nome-template">Nome Template</label>
+                                <input type="text" id="nome-template" class="form-input" placeholder="Es: Affitto mensile">
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -701,57 +736,118 @@
                     return { ...movimento, saldoProgressivo, saldoClass, saldoIcon };
                 });
             
-            tbody.innerHTML = movimentiConSaldo.map(movimento => `
-                <tr class="movimento-row" data-id="${movimento.id}" draggable="true">
-                    <td class="drag-handle" style="text-align: center; color: var(--gray-400); cursor: move; user-select: none; font-weight: bold;">
-                        ⋮⋮
-                    </td>
-                    <td>${window.CONFIG_UTILS.formatDate(movimento.data)}</td>
-                    <td>
-                        ${movimento.descrizione}
-                        ${movimento.is_modificato ? '<span style="color: var(--primary); font-size: 0.75em;">●</span>' : ''}
-                    </td>
-                    <td>
-                        <span class="categoria-badge" style="background-color: ${movimento.categoria?.colore || '#e5e7eb'}20;">
-                            ${movimento.categoria?.nome || 'N/A'}
-                        </span>
-                    </td>
-                    <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
-                        ${movimento.tipo === 'entrata' ? '+' : '−'}${window.CONFIG_UTILS.formatCurrency(Math.abs(movimento.importo))}
-                    </td>
-                    <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
-                        ${movimento.tipo.charAt(0).toUpperCase() + movimento.tipo.slice(1)}
-                    </td>
-                    <td>
-                        <span class="status-badge status-${movimento.stato}">
-                            ${movimento.stato}
-                        </span>
-                    </td>
-                    <td class="saldo-progressivo ${movimento.saldoClass}">
-                        <div class="saldo-container">
-                            <i data-lucide="${movimento.saldoIcon}" class="saldo-icon"></i>
-                            <span class="saldo-amount">${window.CONFIG_UTILS.formatCurrency(movimento.saldoProgressivo)}</span>
-                        </div>
-                    </td>
-                    <td class="actions-cell">
-                        <div class="action-buttons">
-                            <button class="btn-icon ${movimento.stato === 'eseguito' ? 'executed' : 'pending'}" 
-                                    onclick="toggleEseguito('${movimento.id}')">
-                                <i data-lucide="${movimento.stato === 'eseguito' ? 'check-circle-2' : 'circle'}"></i>
-                            </button>
-                            <button class="btn-icon edit" onclick="editMovimento('${movimento.id}')">
-                                <i data-lucide="edit"></i>
-                            </button>
-                            <button class="btn-icon duplicate" onclick="duplicateMovimento('${movimento.id}')">
-                                <i data-lucide="copy"></i>
-                            </button>
-                            <button class="btn-icon delete" onclick="confirmDelete('${movimento.id}')">
-                                <i data-lucide="trash-2"></i>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-            `).join('');
+            // Raggruppa per mese
+            const movimentiGrouped = [];
+            let currentMonth = null;
+            let monthIndex = 0;
+            
+            movimentiConSaldo.forEach(movimento => {
+                const movimentoDate = new Date(movimento.data);
+                const monthKey = `${movimentoDate.getFullYear()}-${movimentoDate.getMonth()}`;
+                
+                if (currentMonth !== monthKey) {
+                    currentMonth = monthKey;
+                    const monthName = movimentoDate.toLocaleDateString('it-IT', { 
+                        month: 'long', 
+                        year: 'numeric' 
+                    }).toUpperCase();
+                    
+                    // Conta movimenti del mese
+                    const movimentiMese = movimentiConSaldo.filter(m => {
+                        const mDate = new Date(m.data);
+                        return `${mDate.getFullYear()}-${mDate.getMonth()}` === monthKey;
+                    });
+                    
+                    movimentiGrouped.push({
+                        type: 'divider',
+                        content: `📅 ${monthName} (${movimentiMese.length} movimenti)`,
+                        monthIndex: monthIndex++
+                    });
+                }
+                
+                movimentiGrouped.push({
+                    type: 'movimento',
+                    data: movimento,
+                    monthIndex: monthIndex - 1
+                });
+            });
+            
+            tbody.innerHTML = movimentiGrouped.map(item => {
+                if (item.type === 'divider') {
+                    return `
+                        <tr class="divisore-mese">
+                            <td colspan="9" style="
+                                background: linear-gradient(90deg, var(--primary) 0%, var(--primary-dark) 100%);
+                                color: white;
+                                text-align: center;
+                                font-weight: 600;
+                                font-size: 0.9em;
+                                padding: 0.75rem 1rem;
+                                letter-spacing: 0.5px;
+                                border: none;
+                            ">
+                                ${item.content}
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                const movimento = item.data;
+                const isEvenMonth = item.monthIndex % 2 === 0;
+                const monthClass = isEvenMonth ? 'mese-pari' : 'mese-dispari';
+                
+                return `
+                    <tr class="movimento-row ${monthClass}" data-id="${movimento.id}" draggable="true">
+                        <td class="drag-handle" style="text-align: center; color: var(--gray-400); cursor: move; user-select: none; font-weight: bold;">
+                            ⋮⋮
+                        </td>
+                        <td>${window.CONFIG_UTILS.formatDate(movimento.data)}</td>
+                        <td>
+                            ${movimento.descrizione}
+                            ${movimento.is_modificato ? '<span style="color: var(--primary); font-size: 0.75em;" title="Movimento riposizionato">●</span>' : ''}
+                        </td>
+                        <td>
+                            <span class="categoria-badge" style="background-color: ${movimento.categoria?.colore || '#e5e7eb'}20;">
+                                ${movimento.categoria?.nome || 'N/A'}
+                            </span>
+                        </td>
+                        <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
+                            ${movimento.tipo === 'entrata' ? '+' : '−'}${window.CONFIG_UTILS.formatCurrency(Math.abs(movimento.importo))}
+                        </td>
+                        <td class="${movimento.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
+                            ${movimento.tipo.charAt(0).toUpperCase() + movimento.tipo.slice(1)}
+                        </td>
+                        <td>
+                            <span class="status-badge status-${movimento.stato}">
+                                ${movimento.stato}
+                            </span>
+                        </td>
+                        <td class="saldo-progressivo ${movimento.saldoClass}">
+                            <div class="saldo-container">
+                                <i data-lucide="${movimento.saldoIcon}" class="saldo-icon"></i>
+                                <span class="saldo-amount">${window.CONFIG_UTILS.formatCurrency(movimento.saldoProgressivo)}</span>
+                            </div>
+                        </td>
+                        <td class="actions-cell">
+                            <div class="action-buttons">
+                                <button class="btn-icon ${movimento.stato === 'eseguito' ? 'executed' : 'pending'}" 
+                                        onclick="toggleEseguito('${movimento.id}')">
+                                    <i data-lucide="${movimento.stato === 'eseguito' ? 'check-circle-2' : 'circle'}"></i>
+                                </button>
+                                <button class="btn-icon edit" onclick="editMovimento('${movimento.id}')">
+                                    <i data-lucide="edit"></i>
+                                </button>
+                                <button class="btn-icon duplicate" onclick="duplicateMovimento('${movimento.id}')">
+                                    <i data-lucide="copy"></i>
+                                </button>
+                                <button class="btn-icon delete" onclick="confirmDelete('${movimento.id}')">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
             
             lucide.createIcons();
             initializeDragAndDrop();
@@ -815,14 +911,237 @@
             lucide.createIcons();
         }
 
-        // Navigazione
+        // === TEMPLATE RICORRENTI ===
+        async function createTemplateRicorrente(movimentoBase) {
+            const frequenza = document.getElementById('frequenza').value;
+            const durataMesi = parseInt(document.getElementById('durata-mesi').value);
+            const nomeTemplate = document.getElementById('nome-template').value || movimentoBase.descrizione;
+            
+            console.log('🔄 Creando template ricorrente:', { frequenza, durataMesi, nomeTemplate });
+            
+            const movimenti = [];
+            const dataInizio = new Date(movimentoBase.data);
+            let dataCorrente = new Date(dataInizio);
+            const dataFine = new Date(dataInizio);
+            dataFine.setMonth(dataFine.getMonth() + durataMesi);
+            
+            // Genera movimenti in base alla frequenza
+            while (dataCorrente <= dataFine) {
+                const movimento = {
+                    ...movimentoBase,
+                    data: dataCorrente.toISOString().split('T')[0],
+                    descrizione: `${nomeTemplate} (${formatMeseAnno(dataCorrente)})`,
+                    stato: 'previsto'
+                };
+                
+                movimenti.push(movimento);
+                
+                // Calcola prossima data
+                switch (frequenza) {
+                    case 'giornaliero':
+                        dataCorrente.setDate(dataCorrente.getDate() + 1);
+                        break;
+                    case 'settimanale':
+                        dataCorrente.setDate(dataCorrente.getDate() + 7);
+                        break;
+                    case 'mensile':
+                        dataCorrente.setMonth(dataCorrente.getMonth() + 1);
+                        break;
+                    case 'trimestrale':
+                        dataCorrente.setMonth(dataCorrente.getMonth() + 3);
+                        break;
+                    case 'semestrale':
+                        dataCorrente.setMonth(dataCorrente.getMonth() + 6);
+                        break;
+                    case 'annuale':
+                        dataCorrente.setFullYear(dataCorrente.getFullYear() + 1);
+                        break;
+                }
+            }
+            
+            // Salva tutti i movimenti
+            for (const movimento of movimenti) {
+                await saveMovimento(movimento);
+            }
+            
+            alert(`✅ Creati ${movimenti.length} movimenti ricorrenti`);
+            console.log(`📅 Template ricorrente completato: ${movimenti.length} movimenti`);
+        }
+        
+        function formatMeseAnno(data) {
+            return data.toLocaleDateString('it-IT', { month: 'short', year: 'numeric' });
+        }
+
+        // === GESTIONE CATEGORIE ===
+        function switchToCategorie() {
+            app.currentView = 'categorie';
+            document.getElementById('main-title').textContent = 'Gestione Categorie';
+            document.getElementById('menu-categorie').classList.add('active');
+            document.getElementById('menu-movimenti').classList.remove('active');
+            document.getElementById('menu-storico').classList.remove('active');
+            document.getElementById('add-movimento-btn').style.display = 'none';
+            document.getElementById('storicizza-btn').style.display = 'none';
+            renderTabellaCategorie();
+        }
+        
+        function renderTabellaCategorie() {
+            const tbody = document.getElementById('movimenti-tbody');
+            if (!tbody) return;
+            
+            // Cambia header tabella per categorie
+            const table = document.querySelector('.movimenti-table');
+            const originalHeader = table.querySelector('thead tr').innerHTML;
+            
+            table.querySelector('thead tr').innerHTML = `
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>Colore</th>
+                <th>Icona</th>
+                <th>Stato</th>
+                <th>Utilizzo</th>
+                <th>Azioni</th>
+            `;
+            
+            if (app.categorie.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 3rem; color: var(--gray-500);">
+                            Nessuna categoria presente.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            tbody.innerHTML = app.categorie.map(categoria => {
+                const utilizzo = app.movimenti.filter(m => m.categoria_id === categoria.id).length;
+                
+                return `
+                    <tr class="categoria-row" data-id="${categoria.id}">
+                        <td>
+                            <span class="categoria-badge" style="background-color: ${categoria.colore}20; border-color: ${categoria.colore};">
+                                ${categoria.nome}
+                            </span>
+                        </td>
+                        <td class="${categoria.tipo === 'entrata' ? 'tipo-entrata' : 'tipo-uscita'}">
+                            ${categoria.tipo.charAt(0).toUpperCase() + categoria.tipo.slice(1)}
+                        </td>
+                        <td>
+                            <div style="display: inline-block; width: 20px; height: 20px; background-color: ${categoria.colore}; border-radius: 4px;"></div>
+                            <code style="margin-left: 0.5rem; font-size: 0.75em; color: var(--gray-500);">${categoria.colore}</code>
+                        </td>
+                        <td>
+                            <i data-lucide="${categoria.icona || 'tag'}" style="width: 16px; height: 16px;"></i>
+                        </td>
+                        <td>
+                            <span class="status-badge ${categoria.attiva ? 'status-eseguito' : 'status-annullato'}">
+                                ${categoria.attiva ? 'Attiva' : 'Disattivata'}
+                            </span>
+                        </td>
+                        <td>
+                            ${utilizzo} movimenti
+                        </td>
+                        <td class="actions-cell">
+                            <div class="action-buttons" style="opacity: 1;">
+                                <button class="btn-icon edit" onclick="editCategoria('${categoria.id}')" title="Modifica">
+                                    <i data-lucide="edit"></i>
+                                </button>
+                                <button class="btn-icon ${categoria.attiva ? 'pending' : 'executed'}" 
+                                        onclick="toggleCategoriaAttiva('${categoria.id}')" 
+                                        title="${categoria.attiva ? 'Disattiva' : 'Attiva'}">
+                                    <i data-lucide="${categoria.attiva ? 'eye-off' : 'eye'}"></i>
+                                </button>
+                                <button class="btn-icon delete" 
+                                        onclick="confirmDeleteCategoria('${categoria.id}')" 
+                                        title="Elimina"
+                                        ${utilizzo > 0 ? 'disabled' : ''}>
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            lucide.createIcons();
+            
+            // Salva header originale per il restore
+            table.dataset.originalHeader = originalHeader;
+        }
+        
+        async function toggleCategoriaAttiva(id) {
+            const categoria = app.categorie.find(c => c.id === id);
+            if (!categoria) return;
+            
+            const nuovoStato = !categoria.attiva;
+            
+            const { error } = await supabaseClient
+                .from('categorie')
+                .update({ attiva: nuovoStato })
+                .eq('id', id);
+            
+            if (error) {
+                alert('Errore nell\'aggiornamento categoria: ' + error.message);
+                return;
+            }
+            
+            await loadCategorie();
+            renderTabellaCategorie();
+        }
+        
+        function editCategoria(id) {
+            const categoria = app.categorie.find(c => c.id === id);
+            if (categoria) {
+                // TODO: Implementare modal modifica categoria
+                alert('Modifica categoria: ' + categoria.nome + '\n(Da implementare)');
+            }
+        }
+        
+        function confirmDeleteCategoria(id) {
+            const categoria = app.categorie.find(c => c.id === id);
+            const utilizzo = app.movimenti.filter(m => m.categoria_id === id).length;
+            
+            if (utilizzo > 0) {
+                alert(`Impossibile eliminare la categoria "${categoria.nome}": è utilizzata in ${utilizzo} movimenti.`);
+                return;
+            }
+            
+            showConfirmModal(
+                'Elimina Categoria',
+                `Sei sicuro di voler eliminare la categoria "${categoria.nome}"?`,
+                async () => {
+                    const { error } = await supabaseClient
+                        .from('categorie')
+                        .delete()
+                        .eq('id', id);
+                    
+                    if (error) {
+                        alert('Errore nell\'eliminazione categoria: ' + error.message);
+                        return;
+                    }
+                    
+                    await loadCategorie();
+                    renderTabellaCategorie();
+                    alert('Categoria eliminata con successo');
+                }
+            );
+        }
         function switchToMovimenti() {
             app.currentView = 'movimenti';
             document.getElementById('main-title').textContent = 'Movimenti Attivi';
             document.getElementById('menu-movimenti').classList.add('active');
             document.getElementById('menu-storico').classList.remove('active');
+            document.getElementById('menu-categorie').classList.remove('active');
             document.getElementById('add-movimento-btn').style.display = 'inline-flex';
             document.getElementById('storicizza-btn').style.display = 'inline-flex';
+            
+            // Ripristina header originale se necessario
+            const table = document.querySelector('.movimenti-table');
+            if (table.dataset.originalHeader) {
+                table.querySelector('thead tr').innerHTML = table.dataset.originalHeader;
+                delete table.dataset.originalHeader;
+            }
+            
             renderTabella();
         }
 
@@ -831,8 +1150,17 @@
             document.getElementById('main-title').textContent = 'Storico Movimenti';
             document.getElementById('menu-storico').classList.add('active');
             document.getElementById('menu-movimenti').classList.remove('active');
+            document.getElementById('menu-categorie').classList.remove('active');
             document.getElementById('add-movimento-btn').style.display = 'none';
             document.getElementById('storicizza-btn').style.display = 'none';
+            
+            // Ripristina header originale se necessario
+            const table = document.querySelector('.movimenti-table');
+            if (table.dataset.originalHeader) {
+                table.querySelector('thead tr').innerHTML = table.dataset.originalHeader;
+                delete table.dataset.originalHeader;
+            }
+            
             loadMovimentiStorico();
         }
 
@@ -851,12 +1179,22 @@
                 document.getElementById('categoria').value = movimento.categoria_id;
                 document.getElementById('stato').value = movimento.stato;
                 app.editingId = movimento.id;
+                
+                // Nascondi opzioni ricorrenza durante modifica
+                document.getElementById('ricorrente').disabled = true;
+                document.getElementById('ricorrente').parentElement.style.display = 'none';
             } else {
                 document.getElementById('movimento-modal-title').textContent = 'Nuovo Movimento';
                 document.getElementById('movimento-save-text').textContent = 'Salva';
                 document.getElementById('movimento-form').reset();
                 document.getElementById('data').valueAsDate = new Date();
                 app.editingId = null;
+                
+                // Reset opzioni ricorrenza
+                document.getElementById('ricorrente').disabled = false;
+                document.getElementById('ricorrente').parentElement.style.display = 'block';
+                document.getElementById('ricorrente').checked = false;
+                document.getElementById('ricorrenza-options').style.display = 'none';
             }
             
             updateCategorieSelect();
@@ -1032,14 +1370,30 @@
                         stato: document.getElementById('stato').value
                     };
                     
-                    if (app.editingId) {
-                        await updateMovimento(app.editingId, formData);
+                    const isRicorrente = document.getElementById('ricorrente').checked;
+                    
+                    if (isRicorrente && !app.editingId) {
+                        // Crea template ricorrente
+                        await createTemplateRicorrente(formData);
                     } else {
-                        await saveMovimento(formData);
+                        // Movimento singolo
+                        if (app.editingId) {
+                            await updateMovimento(app.editingId, formData);
+                        } else {
+                            await saveMovimento(formData);
+                        }
                     }
                     
                     hideMovimentoModal();
                 });
+                
+                // Toggle ricorrenza options
+                document.getElementById('ricorrente').addEventListener('change', (e) => {
+                    const options = document.getElementById('ricorrenza-options');
+                    options.style.display = e.target.checked ? 'block' : 'none';
+                });
+                
+                document.getElementById('menu-categorie').addEventListener('click', switchToCategorie);
                 
                 lucide.createIcons();
                 console.log('🚀 App inizializzata con Drag & Drop');
