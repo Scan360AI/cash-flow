@@ -248,6 +248,7 @@
         }
 
         function handleDragStart(e) {
+            console.log('🔥 DRAG START EVENT:', e.target);
             if (!e.target.closest('.movimento-row')) return;
             
             const row = e.target.closest('.movimento-row');
@@ -258,7 +259,7 @@
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/html', row.outerHTML);
             
-            console.log('🎯 Drag started:', app.draggedId);
+            console.log('🎯 Drag started for movement:', app.draggedId);
         }
 
         function handleDragEnter(e) {
@@ -751,11 +752,7 @@
             `).join('');
             
             lucide.createIcons();
-            
-            // Reinizializza drag & drop dopo render
-            setTimeout(() => {
-                initializeDragAndDrop();
-            }, 100);
+            initializeDragAndDrop();
         }
 
         function renderTabellaStorico() {
