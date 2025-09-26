@@ -28,11 +28,11 @@
         <!-- Sidebar con menu -->
         <aside class="app-sidebar">
             <div class="sidebar-menu">
-                <div class="menu-item active">
+                <div class="menu-item active" id="menu-movimenti">
                     <i data-lucide="credit-card" class="menu-icon"></i>
                     <span>Movimenti</span>
                 </div>
-                <div class="menu-item">
+                <div class="menu-item" id="menu-storico">
                     <i data-lucide="archive" class="menu-icon"></i>
                     <span>Storico</span>
                 </div>
@@ -68,7 +68,7 @@
         <!-- Main content -->
         <main class="app-main">
             <div class="main-header">
-                <h2>Movimenti Attivi</h2>
+                <h2 id="main-title">Movimenti Attivi</h2>
                 <div class="main-actions">
                     <button class="btn btn-primary" id="add-movimento-btn">
                         <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
@@ -191,10 +191,9 @@
         </div>
     </div>
 
-    <!-- JavaScript -->
     <script src="config.js"></script>
     <script>
-        // === CONFIGURAZIONE DEFINITIVA ===
+        // Configurazione
         window.SUPABASE_CONFIG = window.SUPABASE_CONFIG || SUPABASE_CONFIG || {
             url: 'https://pnrjsisykqzwvcdjdyri.supabase.co',
             key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBucmpzaXN5a3F6d3ZjZGpkeXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MDM5MzAsImV4cCI6MjA3NDM3OTkzMH0.vpauNA2NYZlA9vIW7SItUvM3GuOxLAvFLdUQehNCQ-0'
@@ -213,42 +212,35 @@
             }
         };
 
-        // === STATO GLOBALE ===
+        // Stato globale
         const app = {
             movimenti: [],
             movimentiStorico: [],
             categorie: [],
-            settings: {
-                saldoIniziale: 0,
-                limiteScoperto: 0
-            },
+            settings: { saldoIniziale: 0, limiteScoperto: 0 },
             saldoContabile: 0,
             saldoDisponibile: 0,
             editingId: null,
             initialized: false,
-            currentView: 'movimenti' // 'movimenti' o 'storico'
+            currentView: 'movimenti'
         };
 
         let supabaseClient;
 
-        // === FUNZIONI DATABASE ===
+        // Funzioni database
         async function loadCategorie() {
-            console.log('Caricando categorie...');
             const { data, error } = await supabaseClient
                 .from('categorie')
                 .select('*')
                 .eq('attiva', true)
-                .order('tipo', { ascending: true })
-                .order('nome', { ascending: true });
+                .order('tipo', { ascending: true });
             
             if (error) throw error;
-            
             app.categorie = data || [];
             updateCategorieSelect();
         }
 
         async function loadSettings() {
-            console.log('Caricando impostazioni...');
             const { data, error } = await supabaseClient
                 .from('settings')
                 .select('*')
@@ -262,26 +254,22 @@
                     limiteScoperto: parseFloat(data[0].limite_scoperto) || 0
                 };
             }
-            
             updateSettingsForm();
         }
 
         async function loadMovimenti() {
-            console.log('Caricando movimenti...');
             const { data, error } = await supabaseClient
                 .from('movimenti')
                 .select(`*, categoria:categorie(nome, colore)`)
-                .eq('storicizzato', false) // Solo movimenti attivi
+                .eq('storicizzato', false)
                 .order('data', { ascending: true });
             
             if (error) {
-                // Se la colonna storicizzato non esiste, carica tutti i non-annullati
-                if (error.code === 'PGRST116' || error.message.includes('storicizzato')) {
-                    console.log('Colonna storicizzato non esiste, usando filtro per stato...');
+                if (error.message.includes('storicizzato')) {
                     const { data: allData, error: fallbackError } = await supabaseClient
                         .from('movimenti')
                         .select(`*, categoria:categorie(nome, colore)`)
-                        .neq('stato', 'annullato') // Escludi solo gli annullati
+                        .neq('stato', 'annullato')
                         .order('data', { ascending: true });
                     
                     if (fallbackError) throw fallbackError;
@@ -293,22 +281,21 @@
                 app.movimenti = data || [];
             }
             
-            renderTabella();
+            if (app.currentView === 'movimenti') {
+                renderTabella();
+            }
             updateSaldi();
         }
 
         async function loadMovimentiStorico() {
-            console.log('Caricando movimenti storico...');
             const { data, error } = await supabaseClient
                 .from('movimenti')
                 .select(`*, categoria:categorie(nome, colore)`)
-                .eq('storicizzato', true) // Solo movimenti storicizzati
-                .order('storicizzato_at', { ascending: false }); // Più recenti prima
+                .eq('storicizzato', true)
+                .order('storicizzato_at', { ascending: false });
             
             if (error) {
-                // Se la colonna storicizzato non esiste, carica gli annullati
-                if (error.code === 'PGRST116' || error.message.includes('storicizzato')) {
-                    console.log('Colonna storicizzato non esiste, caricando movimenti annullati...');
+                if (error.message.includes('storicizzato')) {
                     const { data: allData, error: fallbackError } = await supabaseClient
                         .from('movimenti')
                         .select(`*, categoria:categorie(nome, colore)`)
@@ -378,7 +365,7 @@
             updateSaldi();
         }
 
-        // === FUNZIONI UI ===
+        // Funzioni UI
         function updateCategorieSelect() {
             const select = document.getElementById('categoria');
             if (!select) return;
@@ -452,7 +439,6 @@
                 return;
             }
             
-            // Calcolo saldi progressivi
             let saldoProgressivo = app.settings.saldoIniziale;
             
             const movimentiConSaldo = [...app.movimenti]
@@ -528,6 +514,9 @@
                 </tr>
             `).join('');
             
+            lucide.createIcons();
+        }
+
         function renderTabellaStorico() {
             const tbody = document.getElementById('movimenti-tbody');
             if (!tbody) return;
@@ -559,9 +548,7 @@
                         ${movimento.tipo.charAt(0).toUpperCase() + movimento.tipo.slice(1)}
                     </td>
                     <td>
-                        <span class="status-badge status-eseguito">
-                            Storicizzato
-                        </span>
+                        <span class="status-badge status-eseguito">Storicizzato</span>
                     </td>
                     <td class="saldo-progressivo">
                         <div class="saldo-container">
@@ -585,7 +572,28 @@
             lucide.createIcons();
         }
 
-        // === MODAL FUNCTIONS ===
+        // Navigazione
+        function switchToMovimenti() {
+            app.currentView = 'movimenti';
+            document.getElementById('main-title').textContent = 'Movimenti Attivi';
+            document.getElementById('menu-movimenti').classList.add('active');
+            document.getElementById('menu-storico').classList.remove('active');
+            document.getElementById('add-movimento-btn').style.display = 'inline-flex';
+            document.getElementById('storicizza-btn').style.display = 'inline-flex';
+            renderTabella();
+        }
+
+        function switchToStorico() {
+            app.currentView = 'storico';
+            document.getElementById('main-title').textContent = 'Storico Movimenti';
+            document.getElementById('menu-storico').classList.add('active');
+            document.getElementById('menu-movimenti').classList.remove('active');
+            document.getElementById('add-movimento-btn').style.display = 'none';
+            document.getElementById('storicizza-btn').style.display = 'none';
+            loadMovimentiStorico();
+        }
+
+        // Modal
         function showMovimentoModal(movimento = null) {
             const modal = document.getElementById('movimento-modal');
             if (!modal) return;
@@ -593,19 +601,16 @@
             if (movimento) {
                 document.getElementById('movimento-modal-title').textContent = 'Modifica Movimento';
                 document.getElementById('movimento-save-text').textContent = 'Aggiorna';
-                
                 document.getElementById('data').value = movimento.data;
                 document.getElementById('descrizione').value = movimento.descrizione;
                 document.getElementById('importo').value = Math.abs(movimento.importo);
                 document.getElementById('tipo').value = movimento.tipo;
                 document.getElementById('categoria').value = movimento.categoria_id;
                 document.getElementById('stato').value = movimento.stato;
-                
                 app.editingId = movimento.id;
             } else {
                 document.getElementById('movimento-modal-title').textContent = 'Nuovo Movimento';
                 document.getElementById('movimento-save-text').textContent = 'Salva';
-                
                 document.getElementById('movimento-form').reset();
                 document.getElementById('data').valueAsDate = new Date();
                 app.editingId = null;
@@ -624,91 +629,16 @@
             document.getElementById('modal-title').textContent = title;
             document.getElementById('modal-message').textContent = message;
             document.getElementById('modal-overlay').style.display = 'flex';
-            
             document.getElementById('modal-confirm').onclick = () => {
                 document.getElementById('modal-overlay').style.display = 'none';
                 onConfirm();
             };
         }
 
-        // === NAVIGAZIONE VISTE ===
-        function switchToMovimenti() {
-            app.currentView = 'movimenti';
-            document.querySelector('.main-header h2').textContent = 'Movimenti Attivi';
-            document.querySelector('.menu-item.active').classList.remove('active');
-            document.querySelectorAll('.menu-item')[0].classList.add('active');
-            
-            // Mostra i pulsanti per movimenti attivi
-            document.getElementById('add-movimento-btn').style.display = 'inline-flex';
-            document.getElementById('storicizza-btn').style.display = 'inline-flex';
-            
-            renderTabella();
-        }
-
-        function switchToStorico() {
-            app.currentView = 'storico';
-            document.querySelector('.main-header h2').textContent = 'Storico Movimenti';
-            document.querySelector('.menu-item.active').classList.remove('active');
-            document.querySelectorAll('.menu-item')[1].classList.add('active');
-            
-            // Nascondi i pulsanti per lo storico
-            document.getElementById('add-movimento-btn').style.display = 'none';
-            document.getElementById('storicizza-btn').style.display = 'none';
-            
-            loadMovimentiStorico();
-        }
-
-        // === AZIONI STORICO ===
-        async function ripristinaMovimento(id) {
-            try {
-                const { error } = await supabaseClient
-                    .from('movimenti')
-                    .update({ 
-                        storicizzato: false, 
-                        storicizzato_at: null,
-                        stato: 'eseguito' // Ripristina come eseguito
-                    })
-                    .eq('id', id);
-                
-                if (error) {
-                    // Fallback se non c'è colonna storicizzato
-                    const { error: fallbackError } = await supabaseClient
-                        .from('movimenti')
-                        .update({ stato: 'eseguito' })
-                        .eq('id', id);
-                    
-                    if (fallbackError) throw fallbackError;
-                }
-                
-                await loadMovimentiStorico();
-                await loadMovimenti(); // Ricarica anche i movimenti attivi
-                alert('Movimento ripristinato');
-            } catch (error) {
-                console.error('Errore ripristino:', error);
-                alert('Errore durante il ripristino');
-            }
-        }
-
-        async function eliminaDefinitivamente(id) {
-            showConfirmModal(
-                'Elimina Definitivamente',
-                'Sei sicuro? Questa operazione non può essere annullata.',
-                async () => {
-                    try {
-                        await deleteMovimento(id);
-                        await loadMovimentiStorico();
-                        alert('Movimento eliminato definitivamente');
-                    } catch (error) {
-                        console.error('Errore eliminazione:', error);
-                        alert('Errore durante l\'eliminazione');
-                    }
-                }
-            );
-        }
+        // Azioni movimenti
         async function toggleEseguito(id) {
             const movimento = app.movimenti.find(m => m.id === id);
             if (!movimento) return;
-            
             const nuovoStato = movimento.stato === 'eseguito' ? 'previsto' : 'eseguito';
             await updateMovimento(id, { stato: nuovoStato });
         }
@@ -753,84 +683,82 @@
                 'Storicizza Movimenti',
                 `Vuoi spostare ${eseguiti.length} movimenti nello storico?`,
                 async () => {
-                    try {
-                        const ids = eseguiti.map(m => m.id);
-                        
-                        // Tenta di aggiungere le colonne se non esistono
-                        try {
-                            await supabaseClient.rpc('exec_sql', {
-                                sql: `
-                                    ALTER TABLE movimenti 
-                                    ADD COLUMN IF NOT EXISTS storicizzato BOOLEAN DEFAULT false,
-                                    ADD COLUMN IF NOT EXISTS storicizzato_at TIMESTAMP WITH TIME ZONE;
-                                    
-                                    UPDATE movimenti 
-                                    SET storicizzato = false 
-                                    WHERE storicizzato IS NULL;
-                                `
-                            });
-                            console.log('Colonne storicizzato aggiunte/verificate');
-                        } catch (sqlError) {
-                            console.log('Impossibile eseguire SQL:', sqlError.message);
+                    const ids = eseguiti.map(m => m.id);
+                    
+                    const { error } = await supabaseClient
+                        .from('movimenti')
+                        .update({ 
+                            storicizzato: true, 
+                            storicizzato_at: new Date().toISOString() 
+                        })
+                        .in('id', ids);
+                    
+                    if (error && error.message.includes('storicizzato')) {
+                        for (const movimento of eseguiti) {
+                            await supabaseClient
+                                .from('movimenti')
+                                .update({ 
+                                    descrizione: `[STORICIZZATO] ${movimento.descrizione}`,
+                                    updated_at: new Date().toISOString()
+                                })
+                                .eq('id', movimento.id);
                         }
-                        
-                        // Prova a storicizzare
-                        let { error } = await supabaseClient
-                            .from('movimenti')
-                            .update({ 
-                                storicizzato: true, 
-                                storicizzato_at: new Date().toISOString() 
-                            })
-                            .in('id', ids);
-                        
-                        if (error && (error.message.includes('storicizzato') || error.code === 'PGRST116')) {
-                            // Fallback: usa un campo esistente per marcare come storicizzato
-                            console.log('Fallback: marcando con descrizione speciale');
-                            
-                            for (const movimento of eseguiti) {
-                                await supabaseClient
-                                    .from('movimenti')
-                                    .update({ 
-                                        descrizione: `[STORICIZZATO] ${movimento.descrizione}`,
-                                        updated_at: new Date().toISOString()
-                                    })
-                                    .eq('id', movimento.id);
-                            }
-                            
-                            alert(`${ids.length} movimenti spostati nello storico (modalità compatibilità)`);
-                        } else if (error) {
-                            throw error;
-                        } else {
-                            alert(`${ids.length} movimenti spostati nello storico`);
-                        }
-                        
-                        await loadMovimenti();
-                        
-                    } catch (error) {
-                        console.error('Errore storicizzazione:', error);
-                        alert('Errore durante la storicizzazione: ' + error.message);
+                        alert(`${ids.length} movimenti spostati nello storico (modalità compatibilità)`);
+                    } else if (error) {
+                        console.error('Errore:', error);
+                        alert('Errore durante la storicizzazione');
+                    } else {
+                        alert(`${ids.length} movimenti spostati nello storico`);
                     }
+                    
+                    await loadMovimenti();
                 }
             );
         }
 
-        // === INIZIALIZZAZIONE ===
-        async function initApp() {
-            if (app.initialized) {
-                console.log('App già inizializzata');
-                return;
+        async function ripristinaMovimento(id) {
+            const { error } = await supabaseClient
+                .from('movimenti')
+                .update({ 
+                    storicizzato: false, 
+                    storicizzato_at: null,
+                    stato: 'eseguito'
+                })
+                .eq('id', id);
+            
+            if (error && error.message.includes('storicizzato')) {
+                await supabaseClient
+                    .from('movimenti')
+                    .update({ stato: 'eseguito' })
+                    .eq('id', id);
             }
             
+            await loadMovimentiStorico();
+            await loadMovimenti();
+            alert('Movimento ripristinato');
+        }
+
+        function eliminaDefinitivamente(id) {
+            showConfirmModal(
+                'Elimina Definitivamente',
+                'Sei sicuro? Questa operazione non può essere annullata.',
+                async () => {
+                    await deleteMovimento(id);
+                    await loadMovimentiStorico();
+                    alert('Movimento eliminato definitivamente');
+                }
+            );
+        }
+
+        // Inizializzazione
+        async function initApp() {
+            if (app.initialized) return;
             app.initialized = true;
             
             try {
-                console.log('Inizializzando app...');
-                
-                // Inizializza Supabase
                 const { createClient } = supabase;
                 supabaseClient = createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.key);
                 
-                // Carica dati
                 await loadCategorie();
                 await loadSettings(); 
                 await loadMovimenti();
@@ -839,10 +767,8 @@
                 document.getElementById('add-movimento-btn').addEventListener('click', () => showMovimentoModal());
                 document.getElementById('storicizza-btn').addEventListener('click', storicizzaEseguiti);
                 document.getElementById('salva-impostazioni-quick').addEventListener('click', saveSettings);
-                
-                // Menu navigation
-                document.querySelectorAll('.menu-item')[0].addEventListener('click', switchToMovimenti);
-                document.querySelectorAll('.menu-item')[1].addEventListener('click', switchToStorico);
+                document.getElementById('menu-movimenti').addEventListener('click', switchToMovimenti);
+                document.getElementById('menu-storico').addEventListener('click', switchToStorico);
                 
                 // Modal listeners
                 document.getElementById('movimento-modal-close').addEventListener('click', hideMovimentoModal);
@@ -872,26 +798,16 @@
                     hideMovimentoModal();
                 });
                 
-                console.log('✅ App inizializzata con successo');
                 lucide.createIcons();
+                console.log('App inizializzata');
                 
             } catch (error) {
-                console.error('Errore inizializzazione:', error);
+                console.error('Errore:', error);
                 app.initialized = false;
             }
         }
 
-        // Start app
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initApp);
-        } else {
-            initApp();
-        }
-    </script>
-</body>
-</html>
-
-        // Start app
+        // Start
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initApp);
         } else {
